@@ -22,7 +22,7 @@
       .hdr {
         background: var(--accent);
         color: #fff;
-        padding: 15px 20px;
+        padding: 14px 20px;
         display: flex;
         align-items: center;
         gap: 10px;
@@ -30,39 +30,43 @@
         font-weight: 600;
       }
       .body {
-        padding: 22px 22px 18px;
+        padding: 18px 22px 16px;
         text-align: center;
       }
       .warn-badge {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 56px;
-        height: 56px;
+        width: 48px;
+        height: 48px;
         border-radius: 50%;
         background: #fef3c7;
         color: #d97706;
-        margin-bottom: 12px;
+        margin-bottom: 10px;
       }
       .warn-text {
         font-size: 13.5px;
-        line-height: 1.55;
+        line-height: 1.5;
         color: #334155;
-        margin: 0 0 14px;
+        margin: 0 0 12px;
       }
       .opt-box {
         display: flex;
         align-items: center;
         justify-content: center;
         gap: 8px;
-        padding: 10px 12px;
+        padding: 9px 12px;
         background: var(--surface);
         border: 1px solid var(--border);
         border-radius: 10px;
         font-size: 13px;
         color: var(--text);
-        margin-bottom: 18px;
+        margin-bottom: 16px;
         cursor: pointer;
+      }
+      .opt-box.is-disabled {
+        opacity: 0.65;
+        cursor: not-allowed;
       }
       .opt-box input {
         width: 16px;
@@ -97,12 +101,135 @@
       }
       .status-msg {
         margin-top: 12px;
-        min-height: 20px;
+        min-height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
         font-size: 12.5px;
         font-weight: 600;
+        color: var(--muted);
       }
       .status-ok { color: #15803d; }
       .status-err { color: #b91c1c; }
+
+      /* Spinner nativo accesible sobre <progress> indeterminado */
+      @property --arc-start {
+        syntax: "<angle>";
+        inherits: false;
+        initial-value: 0deg;
+      }
+      @property --arc-end {
+        syntax: "<angle>";
+        inherits: false;
+        initial-value: 0deg;
+      }
+      @property --progress-dash-animation {
+        syntax: "*";
+        inherits: false;
+        initial-value: , progress-dash 3s ease-in-out infinite;
+      }
+      progress.loading-spinner:indeterminate::-webkit-progress-bar {
+        display: none;
+        background: none;
+      }
+      progress.loading-spinner:indeterminate::-webkit-progress-value {
+        display: none;
+        background: none;
+      }
+      progress.loading-spinner:indeterminate::-moz-progress-bar {
+        display: none;
+        background: none;
+      }
+      progress.loading-spinner:indeterminate::slider-fill {
+        display: none;
+        background: none;
+      }
+      progress.loading-spinner:indeterminate {
+        --_from: calc(90deg + var(--arc-start, 0deg));
+        --_to: calc(90deg + var(--arc-end, 158deg));
+        --size: 18px;
+        --thickness: 2.5px;
+        --spinner-color: var(--accent);
+        --track-color: #dbeafe;
+        --spinner-duration: 1.2s;
+        --_used-spinner-duration: var(--spinner-duration);
+
+        position: relative;
+        flex-shrink: 0;
+        width: var(--size);
+        height: var(--size);
+        border-radius: 50%;
+        appearance: none;
+        background: conic-gradient(
+            from var(--_from),
+            var(--spinner-color) calc(var(--_to) - var(--_from)),
+            transparent 0
+          )
+          var(--track-color);
+        animation:
+          progress-spin var(--_used-spinner-duration) linear infinite
+          var(--progress-dash-animation, );
+      }
+      progress.loading-spinner[hidden] {
+        display: none;
+      }
+      @supports (background-clip: border-area) {
+        progress.loading-spinner:indeterminate {
+          background-clip: border-area;
+          border: var(--thickness) solid transparent;
+          background-origin: border-box;
+        }
+      }
+      @supports not (background-clip: border-area) {
+        progress.loading-spinner:indeterminate {
+          --clip-boundary: calc(100% - var(--thickness));
+          -webkit-mask-image: radial-gradient(
+            farthest-side,
+            transparent var(--clip-boundary),
+            black var(--clip-boundary)
+          );
+          mask-image: radial-gradient(
+            farthest-side,
+            transparent var(--clip-boundary),
+            black var(--clip-boundary)
+          );
+          border: 0;
+        }
+      }
+      @media (forced-colors: active) {
+        progress.loading-spinner:indeterminate {
+          forced-color-adjust: none;
+          --spinner-color: CanvasText;
+          --track-color: Canvas;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        progress.loading-spinner:indeterminate {
+          --_used-spinner-duration: 6s;
+          --progress-dash-animation: ;
+          --arc-end: 158deg;
+        }
+      }
+      @keyframes progress-spin {
+        to {
+          rotate: 1turn;
+        }
+      }
+      @keyframes progress-dash {
+        from {
+          --arc-start: 0deg;
+          --arc-end: 3deg;
+        }
+        50% {
+          --arc-start: 100deg;
+          --arc-end: 358deg;
+        }
+        to {
+          --arc-start: 360deg;
+          --arc-end: 363deg;
+        }
+      }
     </style>
   </head>
   <body>
@@ -115,7 +242,7 @@
 
     <div class="body">
       <div class="warn-badge" aria-hidden="true">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
           <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
         </svg>
@@ -137,7 +264,10 @@
         <button type="button" class="btn btn-danger" id="confirmBtn" onclick="confirmInit()">Reinicializar ajustes</button>
       </div>
 
-      <div id="statusMsg" class="status-msg" role="status"></div>
+      <div id="statusMsg" class="status-msg" role="status" aria-live="polite">
+        <progress id="initSpinner" class="loading-spinner" aria-label="Restaurando estructura y validaciones" hidden></progress>
+        <span id="statusText"></span>
+      </div>
     </div>
 
     <script>
@@ -146,35 +276,48 @@
       function confirmInit() {
         const btn = document.getElementById('confirmBtn');
         const cancelBtn = document.getElementById('cancelBtn');
+        const resetChk = document.getElementById('resetAuditChk');
+        const optBox = resetChk.closest('.opt-box');
         const statusEl = document.getElementById('statusMsg');
-        const resetAudit = document.getElementById('resetAuditChk').checked;
+        const spinner = document.getElementById('initSpinner');
+        const statusText = document.getElementById('statusText');
+        const resetAudit = resetChk.checked;
 
         btn.disabled = true;
         cancelBtn.disabled = true;
+        resetChk.disabled = true;
+        if (optBox) optBox.classList.add('is-disabled');
         btn.textContent = 'Aplicando...';
+        spinner.hidden = false;
         statusEl.className = 'status-msg';
-        statusEl.textContent = 'Restaurando estructura y validaciones...';
+        statusText.textContent = 'Restaurando estructura y validaciones...';
 
         google.script.run
           .withSuccessHandler(function (res) {
+            spinner.hidden = true;
             if (res && res.success) {
               statusEl.className = 'status-msg status-ok';
-              statusEl.textContent = 'Estructura restablecida correctamente.';
+              statusText.textContent = 'Estructura restablecida correctamente.';
               setTimeout(function () { google.script.host.close(); }, 900);
             } else {
               btn.disabled = false;
               cancelBtn.disabled = false;
+              resetChk.disabled = false;
+              if (optBox) optBox.classList.remove('is-disabled');
               btn.textContent = 'Reinicializar ajustes';
               statusEl.className = 'status-msg status-err';
-              statusEl.textContent = (res && res.error) || 'Error desconocido';
+              statusText.textContent = (res && res.error) || 'Error desconocido';
             }
           })
           .withFailureHandler(function (err) {
+            spinner.hidden = true;
             btn.disabled = false;
             cancelBtn.disabled = false;
+            resetChk.disabled = false;
+            if (optBox) optBox.classList.remove('is-disabled');
             btn.textContent = 'Reinicializar ajustes';
             statusEl.className = 'status-msg status-err';
-            statusEl.textContent = err.message || 'Error al comunicarse con Apps Script';
+            statusText.textContent = err.message || 'Error al comunicarse con Apps Script';
           })
           .apiExecuteSetupSheet({ resetAudit: resetAudit }, DIALOG_TOKEN);
       }

@@ -49,7 +49,7 @@ function setupSheet() {
   template.APP_NAME = APP_NAME;
   template.accentColor = getConfig_().COLOR_ACENTO;
   template.dialogToken = createAdminDialogToken_(adminEmail);
-  const html = template.evaluate().setWidth(510).setHeight(490);
+  const html = template.evaluate().setWidth(510).setHeight(520);
   SpreadsheetApp.getUi().showModalDialog(html, ' ');
 }
 
