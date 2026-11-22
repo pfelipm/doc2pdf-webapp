@@ -147,7 +147,7 @@ function executeSetupSheet_(options) {
   configSheet.getRange(2, 3, usedRows - 1, 1).setWrap(false);
   SpreadsheetApp.flush();
   configSheet.autoResizeColumn(3);
-  configSheet.setColumnWidth(3, configSheet.getColumnWidth(3) + 24);
+  configSheet.setColumnWidth(3, Math.round(configSheet.getColumnWidth(3) * 1.08) + 32);
 
   SpreadsheetApp.flush();
   configSheet.setRowHeight(1, 32);
@@ -390,7 +390,7 @@ function showAboutDialog() {
   template.APP_AUTHOR_HANDLE = APP_AUTHOR_HANDLE;
   template.APP_AUTHOR_URL = APP_AUTHOR_URL;
   template.accentColor = cfg.COLOR_ACENTO;
-  const html = template.evaluate().setWidth(490).setHeight(600);
+  const html = template.evaluate().setWidth(490).setHeight(640);
   SpreadsheetApp.getUi().showModalDialog(html, ' ');
 }
 

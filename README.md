@@ -10,9 +10,10 @@ Microservicio web ligero e interno para **Google Workspace** desarrollado ínteg
 
 ## Características principales
 
-- **100 % nativo y sin dependencias externas:**
+- **100 % nativo y sin dependencias externas por defecto:**
   - Backend exclusivamente con Apps Script, **Drive API v3** (servicio avanzado nativo) y `UrlFetchApp`.
-  - Frontend y diálogos HTML5 + CSS3 + Vanilla JS + iconos/gráficos SVG embebidos (sin CDNs ni librerías JS externas).
+  - Frontend y diálogos HTML5 + CSS3 + Vanilla JS + iconos SVG embebidos, incluyendo empaquetador **`.zip` nativo** en navegador para descargar lotes completos sin librerías externas.
+  - Visor PDF embebido opcional (`VISOR_PDF_EMBEBIDO = SI`) sobre `<canvas>` con **PDF.js** cargado bajo demanda (si se mantiene en `NO`, abre el PDF directamente en una nueva pestaña con cero dependencias externas).
 - **Soporte completo de documentos de escritorio (21 extensiones + nativos Workspace):**
   - **Documentos:** `.docx`, `.doc`, `.dot`, `.dotx`, `.odt`, `.rtf`
   - **Hojas de cálculo:** `.xlsx`, `.xls`, `.xlt`, `.xltx`, `.xlsm`, `.ods`, `.csv`, `.tsv` *(con selector de papel, orientación, ajuste al ancho, cuadrícula y márgenes)*
@@ -112,7 +113,7 @@ La raíz del repositorio coincide con el directorio raíz de `clasp` (`rootDir: 
 
 ## Ajustes configurables (`Ajustes`)
 
-La pestaña `Ajustes` incorpora validaciones estrictas de datos sobre sus 20 parámetros:
+La pestaña `Ajustes` incorpora validaciones estrictas de datos sobre sus 21 parámetros:
 
 | Clave | Valor inicial | Tipo / Validación | Descripción |
 | :--- | :--- | :--- | :--- |
@@ -133,6 +134,7 @@ La pestaña `Ajustes` incorpora validaciones estrictas de datos sobre sus 20 par
 | `PERMITIR_PRESENTACIONES` | `SI` | Casilla (`SI` / `NO`) | Habilita presentaciones (`.pptx`, `.ppt`, `.odp`) |
 | `PERMITIR_TEXTO` | `SI` | Casilla (`SI` / `NO`) | Habilita texto plano y marcado (`.txt`, `.md`, `.html`, `.htm`) |
 | `PERMITIR_ENLACE_DRIVE` | `SI` | Casilla (`SI` / `NO`) | Habilita la pestaña de conversión por enlace/ID de Drive |
+| `VISOR_PDF_EMBEBIDO` | `NO` | Casilla (`SI` / `NO`) | Activa (`SI`) el visor modal en `<canvas>` con PDF.js bajo demanda; si es `NO`, abre el PDF en pestaña nueva sin librerías externas |
 | `REGISTRAR_NOMBRE_ARCHIVO` | `COMPLETO` | Desplegable (`COMPLETO` / `ANONIMIZADO` / `NINGUNO`) | Nivel de privacidad del nombre registrado en `Auditoría` |
 | `RETENCION_AUDITORIA_DIAS` | `180` | Numérico (`0 – 3 650`) | Días de retención automática (`0` = indefinido; sugerido) |
 | `CARPETA_TEMP_ID` | *(automático)* | Texto (ID Drive) | ID de la subcarpeta `_Doc2PDF_Temp` creada junto a esta hoja |

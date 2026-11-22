@@ -89,6 +89,7 @@ const DEFAULT_CONFIG_DEFS = [
   ['PERMITIR_PRESENTACIONES', 'SI', 'Habilita conversión de presentaciones (.pptx, .ppt, .odp)', 'checkbox'],
   ['PERMITIR_TEXTO', 'SI', 'Habilita conversión de texto plano y marcado (.txt, .md, .html, .htm)', 'checkbox'],
   ['PERMITIR_ENLACE_DRIVE', 'SI', 'Permite convertir documentos pegando una URL compartida de Google Drive', 'checkbox'],
+  ['VISOR_PDF_EMBEBIDO', 'NO', 'Activa (SI) el visor PDF embebido en modal mediante PDF.js (CDN externo); si es NO, abre el PDF en nueva pestaña sin dependencias externas', 'checkbox'],
   ['REGISTRAR_NOMBRE_ARCHIVO', 'COMPLETO', 'Nivel de detalle del nombre en Auditoría: COMPLETO, ANONIMIZADO o NINGUNO', 'audit_mode'],
   ['RETENCION_AUDITORIA_DIAS', 180, 'Días de conservación en Auditoría antes de purga automática (0 = indefinido)', 'number'],
   ['CARPETA_TEMP_ID', '', 'ID de la carpeta temporal en Drive (se crea automáticamente como subcarpeta _Doc2PDF_Temp junto a esta hoja si se deja vacío)', 'text']
@@ -439,6 +440,7 @@ function normalizeConfigObject_(rawInput) {
     PERMITIR_TEXTO: allowTexto,
     FAMILIAS_HABILITADAS: familiesList,
     PERMITIR_ENLACE_DRIVE: parseBoolean_(raw.PERMITIR_ENLACE_DRIVE, true),
+    VISOR_PDF_EMBEBIDO: parseBoolean_(raw.VISOR_PDF_EMBEBIDO, false),
     REGISTRAR_NOMBRE_ARCHIVO: auditNameMode,
     RETENCION_AUDITORIA_DIAS: parseIntClamped_(
       raw.RETENCION_AUDITORIA_DIAS,
@@ -642,6 +644,7 @@ function getPublicClientConfig_(userContext, config) {
     directUploadMaxBytes: DIRECT_UPLOAD_MAX_BYTES,
     chunkSizeBytes: CHUNK_SIZE_BYTES,
     allowDriveLink: cfg.PERMITIR_ENLACE_DRIVE,
+    embeddedPdfViewer: cfg.VISOR_PDF_EMBEBIDO,
     auditNameMode: cfg.REGISTRAR_NOMBRE_ARCHIVO,
     enabledFamilies: cfg.FAMILIAS_HABILITADAS,
     familiesSummary: familiesSummary,

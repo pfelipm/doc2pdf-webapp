@@ -4,6 +4,8 @@
 
   const THEME_STORAGE_KEY = 'doc2pdf-color-scheme';
   const DIRECT_CONCURRENCY = 2;
+  const PDFJS_CDN_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+  const PDFJS_WORKER_CDN_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
   const state = {
     config: null,
@@ -11,7 +13,18 @@
     activeDirect: 0,
     activeChunked: false,
     previewUrl: '',
-    currentTab: 'local'
+    currentTab: 'local',
+    pdfJsLoadPromise: null,
+    pdfWorkerBlobUrl: '',
+    preview: {
+      doc: null,
+      pageNum: 1,
+      totalPages: 1,
+      scale: 1,
+      fitWidth: true,
+      renderTask: null,
+      sessionId: 0
+    }
   };
 
   /* -------------------------------------------------------------------------
@@ -77,8 +90,7 @@
 
       dlg.addEventListener('close', function () {
         if (dlg.id === 'previewDialog') {
-          const frame = document.getElementById('previewFrame');
-          if (frame) frame.src = 'about:blank';
+          destroyPreviewState();
         }
         dlg.returnValue = '';
       });
@@ -109,6 +121,48 @@
     });
     document.getElementById('openFormatsBtn').addEventListener('click', function () {
       document.getElementById('formatsDialog').showModal();
+    });
+
+    document.getElementById('pdfPrevBtn').addEventListener('click', function () {
+      if (state.preview.doc && state.preview.pageNum > 1) {
+        state.preview.pageNum -= 1;
+        renderCurrentPdfPage();
+      }
+    });
+    document.getElementById('pdfNextBtn').addEventListener('click', function () {
+      if (state.preview.doc && state.preview.pageNum < state.preview.totalPages) {
+        state.preview.pageNum += 1;
+        renderCurrentPdfPage();
+      }
+    });
+    document.getElementById('pdfZoomOutBtn').addEventListener('click', function () {
+      if (!state.preview.doc) return;
+      state.preview.fitWidth = false;
+      state.preview.scale = Math.max(0.5, Number((state.preview.scale - 0.2).toFixed(2)));
+      renderCurrentPdfPage();
+    });
+    document.getElementById('pdfZoomFitBtn').addEventListener('click', function () {
+      if (!state.preview.doc) return;
+      state.preview.fitWidth = true;
+      renderCurrentPdfPage();
+    });
+    document.getElementById('pdfZoomInBtn').addEventListener('click', function () {
+      if (!state.preview.doc) return;
+      state.preview.fitWidth = false;
+      state.preview.scale = Math.min(2.8, Number((state.preview.scale + 0.2).toFixed(2)));
+      renderCurrentPdfPage();
+    });
+    document.getElementById('previewDialog').addEventListener('keydown', function (ev) {
+      if (!state.preview.doc) return;
+      if (ev.key === 'ArrowLeft' && state.preview.pageNum > 1) {
+        ev.preventDefault();
+        state.preview.pageNum -= 1;
+        renderCurrentPdfPage();
+      } else if (ev.key === 'ArrowRight' && state.preview.pageNum < state.preview.totalPages) {
+        ev.preventDefault();
+        state.preview.pageNum += 1;
+        renderCurrentPdfPage();
+      }
     });
   }
 
@@ -202,6 +256,162 @@
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+  }
+
+  /* -------------------------------------------------------------------------
+   * Empaquetador ZIP nativo sin dependencias externas (PKWARE STORE + UTF-8)
+   * ---------------------------------------------------------------------- */
+  const CRC32_TABLE = (function () {
+    const tbl = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let k = 0; k < 8; k++) {
+        c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      }
+      tbl[i] = c >>> 0;
+    }
+    return tbl;
+  })();
+
+  function crc32(bytes) {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) {
+      crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ bytes[i]) & 0xFF];
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  function encodeUtf8(text) {
+    if (typeof TextEncoder !== 'undefined') {
+      return new TextEncoder().encode(String(text || ''));
+    }
+    const str = unescape(encodeURIComponent(String(text || '')));
+    const out = new Uint8Array(str.length);
+    for (let i = 0; i < str.length; i++) {
+      out[i] = str.charCodeAt(i);
+    }
+    return out;
+  }
+
+  function getDosDateTime(dateObj) {
+    const d = dateObj || new Date();
+    const year = Math.min(2107, Math.max(1980, d.getFullYear()));
+    const dosTime = ((d.getHours() & 0x1F) << 11) |
+      ((d.getMinutes() & 0x3F) << 5) |
+      ((d.getSeconds() >> 1) & 0x1F);
+    const dosDate = (((year - 1980) & 0x7F) << 9) |
+      (((d.getMonth() + 1) & 0x0F) << 5) |
+      (d.getDate() & 0x1F);
+    return { dosTime: dosTime, dosDate: dosDate };
+  }
+
+  function makeUniqueZipName(rawName, usedNames) {
+    const sanitized = String(rawName || 'documento.pdf')
+      .replace(/[\\/\x00-\x1F]+/g, '_')
+      .trim() || 'documento.pdf';
+    let candidate = sanitized;
+    const dotIdx = sanitized.lastIndexOf('.');
+    const base = dotIdx > 0 ? sanitized.slice(0, dotIdx) : sanitized;
+    const ext = dotIdx > 0 ? sanitized.slice(dotIdx) : '';
+    let suffix = 2;
+
+    while (usedNames[candidate.toLowerCase()]) {
+      candidate = base + ' (' + suffix + ')' + ext;
+      suffix += 1;
+    }
+    usedNames[candidate.toLowerCase()] = true;
+    return candidate;
+  }
+
+  function buildZipBytes(entries) {
+    const parts = [];
+    const centralDir = [];
+    let offset = 0;
+    const dos = getDosDateTime(new Date());
+
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      const nameBytes = encodeUtf8(entry.name);
+      const dataBytes = entry.bytes instanceof Uint8Array ? entry.bytes : new Uint8Array(entry.bytes);
+      const fileCrc = crc32(dataBytes);
+      const size = dataBytes.length;
+
+      const localHeader = new Uint8Array(30 + nameBytes.length);
+      const lv = new DataView(localHeader.buffer);
+      lv.setUint32(0, 0x04034B50, true);
+      lv.setUint16(4, 20, true);
+      lv.setUint16(6, 0x0800, true);
+      lv.setUint16(8, 0, true);
+      lv.setUint16(10, dos.dosTime, true);
+      lv.setUint16(12, dos.dosDate, true);
+      lv.setUint32(14, fileCrc, true);
+      lv.setUint32(18, size, true);
+      lv.setUint32(22, size, true);
+      lv.setUint16(26, nameBytes.length, true);
+      lv.setUint16(28, 0, true);
+      localHeader.set(nameBytes, 30);
+
+      parts.push(localHeader, dataBytes);
+
+      const cdHeader = new Uint8Array(46 + nameBytes.length);
+      const cv = new DataView(cdHeader.buffer);
+      cv.setUint32(0, 0x02014B50, true);
+      cv.setUint16(4, 20, true);
+      cv.setUint16(6, 20, true);
+      cv.setUint16(8, 0x0800, true);
+      cv.setUint16(10, 0, true);
+      cv.setUint16(12, dos.dosTime, true);
+      cv.setUint16(14, dos.dosDate, true);
+      cv.setUint32(16, fileCrc, true);
+      cv.setUint32(20, size, true);
+      cv.setUint32(24, size, true);
+      cv.setUint16(28, nameBytes.length, true);
+      cv.setUint16(30, 0, true);
+      cv.setUint16(32, 0, true);
+      cv.setUint16(34, 0, true);
+      cv.setUint16(36, 0, true);
+      cv.setUint32(38, 0, true);
+      cv.setUint32(42, offset, true);
+      cdHeader.set(nameBytes, 46);
+
+      centralDir.push(cdHeader);
+      offset += localHeader.length + size;
+    }
+
+    let cdSize = 0;
+    for (let i = 0; i < centralDir.length; i++) {
+      cdSize += centralDir[i].length;
+    }
+
+    const eocd = new Uint8Array(22);
+    const ev = new DataView(eocd.buffer);
+    ev.setUint32(0, 0x06054B50, true);
+    ev.setUint16(4, 0, true);
+    ev.setUint16(6, 0, true);
+    ev.setUint16(8, entries.length, true);
+    ev.setUint16(10, entries.length, true);
+    ev.setUint32(12, cdSize, true);
+    ev.setUint32(16, offset, true);
+    ev.setUint16(20, 0, true);
+
+    const totalSize = offset + cdSize + eocd.length;
+    const zipBytes = new Uint8Array(totalSize);
+    let cursor = 0;
+    for (let i = 0; i < parts.length; i++) {
+      zipBytes.set(parts[i], cursor);
+      cursor += parts[i].length;
+    }
+    for (let i = 0; i < centralDir.length; i++) {
+      zipBytes.set(centralDir[i], cursor);
+      cursor += centralDir[i].length;
+    }
+    zipBytes.set(eocd, cursor);
+
+    return zipBytes;
+  }
+
+  function buildZipBlob(entries) {
+    return new Blob([buildZipBytes(entries)], { type: 'application/zip' });
   }
 
   /* -------------------------------------------------------------------------
@@ -406,6 +616,7 @@
       enqueueDriveUrlJob(driveInput.value.trim());
     });
 
+    document.getElementById('downloadZipBtn').addEventListener('click', downloadAllAsZip);
     document.getElementById('downloadAllBtn').addEventListener('click', downloadAllCompleted);
     document.getElementById('clearQueueBtn').addEventListener('click', clearAllJobs);
   }
@@ -702,6 +913,7 @@
     if (job.pdfUrl) {
       URL.revokeObjectURL(job.pdfUrl);
     }
+    job.pdfBlob = pdfBlob;
     job.pdfUrl = URL.createObjectURL(pdfBlob);
     job.pdfFileName = res.pdfFileName || 'documento.pdf';
     job.pdfSizeBytes = res.pdfSizeBytes || pdfBlob.size;
@@ -733,6 +945,7 @@
       URL.revokeObjectURL(job.pdfUrl);
       job.pdfUrl = '';
     }
+    job.pdfBlob = null;
     job.status = 'queued';
     job.errorText = '';
     job.progressPct = 0;
@@ -748,12 +961,186 @@
     return null;
   }
 
+  /* -------------------------------------------------------------------------
+   * Visor PDF embebido opcional (PDF.js cargado bajo demanda con Blob worker)
+   * ---------------------------------------------------------------------- */
+  function setPreviewStatus(message, isError) {
+    const statusEl = document.getElementById('previewStatus');
+    const canvas = document.getElementById('previewCanvas');
+    if (!statusEl || !canvas) return;
+    if (message) {
+      statusEl.textContent = message;
+      statusEl.className = 'preview-status' + (isError ? ' err' : '');
+      statusEl.classList.remove('hidden');
+      canvas.classList.add('hidden');
+    } else {
+      statusEl.classList.add('hidden');
+      statusEl.textContent = '';
+      canvas.classList.remove('hidden');
+    }
+  }
+
+  function updatePreviewControls() {
+    const p = state.preview;
+    const hasDoc = Boolean(p.doc);
+    document.getElementById('pdfPageInfo').textContent = hasDoc
+      ? 'Página ' + p.pageNum + ' / ' + p.totalPages
+      : 'Página —';
+    document.getElementById('pdfPrevBtn').disabled = !hasDoc || p.pageNum <= 1;
+    document.getElementById('pdfNextBtn').disabled = !hasDoc || p.pageNum >= p.totalPages;
+    document.getElementById('pdfZoomOutBtn').disabled = !hasDoc;
+    document.getElementById('pdfZoomFitBtn').disabled = !hasDoc;
+    document.getElementById('pdfZoomInBtn').disabled = !hasDoc;
+  }
+
+  function destroyPreviewState() {
+    state.preview.sessionId += 1;
+    if (state.preview.renderTask) {
+      try { state.preview.renderTask.cancel(); } catch (e) {}
+      state.preview.renderTask = null;
+    }
+    if (state.preview.doc) {
+      try { state.preview.doc.destroy(); } catch (e) {}
+      state.preview.doc = null;
+    }
+    state.preview.pageNum = 1;
+    state.preview.totalPages = 1;
+    state.preview.scale = 1;
+    state.preview.fitWidth = true;
+
+    const canvas = document.getElementById('previewCanvas');
+    if (canvas) {
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+    setPreviewStatus('', false);
+    updatePreviewControls();
+  }
+
+  function ensurePdfJsLoaded() {
+    if (window.pdfjsLib && state.pdfWorkerBlobUrl) {
+      return Promise.resolve(window.pdfjsLib);
+    }
+    if (state.pdfJsLoadPromise) {
+      return state.pdfJsLoadPromise;
+    }
+
+    state.pdfJsLoadPromise = new Promise(function (resolve, reject) {
+      const finishInit = function () {
+        if (!window.pdfjsLib) {
+          reject(new Error('No se pudo inicializar el motor PDF.js.'));
+          return;
+        }
+        if (state.pdfWorkerBlobUrl) {
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = state.pdfWorkerBlobUrl;
+          resolve(window.pdfjsLib);
+          return;
+        }
+        fetch(PDFJS_WORKER_CDN_URL, { mode: 'cors' })
+          .then(function (resp) {
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            return resp.text();
+          })
+          .then(function (workerCode) {
+            const workerBlob = new Blob([workerCode], { type: 'application/javascript' });
+            state.pdfWorkerBlobUrl = URL.createObjectURL(workerBlob);
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = state.pdfWorkerBlobUrl;
+            resolve(window.pdfjsLib);
+          })
+          .catch(function () {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_CDN_URL;
+            resolve(window.pdfjsLib);
+          });
+      };
+
+      if (window.pdfjsLib) {
+        finishInit();
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = PDFJS_CDN_URL;
+      script.async = true;
+      script.crossOrigin = 'anonymous';
+      script.referrerPolicy = 'no-referrer';
+      script.onload = finishInit;
+      script.onerror = function () {
+        reject(new Error('No se pudo cargar el visor PDF desde la red (CDN bloqueado o sin conexión).'));
+      };
+      document.head.appendChild(script);
+    }).catch(function (err) {
+      state.pdfJsLoadPromise = null;
+      throw err;
+    });
+
+    return state.pdfJsLoadPromise;
+  }
+
+  function renderCurrentPdfPage() {
+    const p = state.preview;
+    if (!p.doc) return;
+
+    const mySession = p.sessionId;
+    if (p.renderTask) {
+      try { p.renderTask.cancel(); } catch (e) {}
+      p.renderTask = null;
+    }
+
+    updatePreviewControls();
+    p.doc.getPage(p.pageNum).then(function (page) {
+      if (mySession !== state.preview.sessionId) return;
+
+      const stage = document.getElementById('previewStage');
+      const canvas = document.getElementById('previewCanvas');
+      const baseViewport = page.getViewport({ scale: 1 });
+      let targetScale = p.scale;
+
+      if (p.fitWidth) {
+        const availWidth = Math.max(240, (stage ? stage.clientWidth : 800) - 34);
+        targetScale = Math.min(2.5, Math.max(0.5, availWidth / baseViewport.width));
+        p.scale = Number(targetScale.toFixed(2));
+      }
+
+      const viewport = page.getViewport({ scale: targetScale });
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+      canvas.width = Math.max(1, Math.floor(viewport.width * dpr));
+      canvas.height = Math.max(1, Math.floor(viewport.height * dpr));
+      canvas.style.width = Math.floor(viewport.width) + 'px';
+      canvas.style.height = Math.floor(viewport.height) + 'px';
+
+      setPreviewStatus('', false);
+
+      const ctx = canvas.getContext('2d');
+      const renderCtx = {
+        canvasContext: ctx,
+        viewport: viewport,
+        transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null
+      };
+
+      const task = page.render(renderCtx);
+      p.renderTask = task;
+      return task.promise.then(function () {
+        if (mySession === state.preview.sessionId) {
+          p.renderTask = null;
+          updatePreviewControls();
+        }
+      });
+    }).catch(function (err) {
+      if (err && err.name === 'RenderingCancelledException') return;
+      if (mySession !== state.preview.sessionId) return;
+      setPreviewStatus('No se pudo renderizar esta página. Usa «Abrir en pestaña» o «Descargar PDF».', true);
+    });
+  }
+
   function openPreview(jobId) {
     const job = findJob(jobId);
-    if (!job || !job.pdfUrl) return;
+    if (!job || !job.pdfUrl || !job.pdfBlob) return;
+
+    destroyPreviewState();
+    const mySession = state.preview.sessionId;
 
     document.getElementById('previewTitle').textContent = job.pdfFileName;
-    document.getElementById('previewFrame').src = job.pdfUrl;
 
     const dlLink = document.getElementById('previewDownloadLink');
     dlLink.href = job.pdfUrl;
@@ -762,7 +1149,76 @@
     const tabLink = document.getElementById('previewNewTabLink');
     tabLink.href = job.pdfUrl;
 
+    setPreviewStatus('Cargando vista previa PDF...', false);
     document.getElementById('previewDialog').showModal();
+
+    Promise.all([ensurePdfJsLoaded(), job.pdfBlob.arrayBuffer()])
+      .then(function (results) {
+        if (mySession !== state.preview.sessionId) return;
+        const pdfjsLib = results[0];
+        const pdfBytes = new Uint8Array(results[1]);
+        return pdfjsLib.getDocument({ data: pdfBytes }).promise;
+      })
+      .then(function (pdfDoc) {
+        if (!pdfDoc || mySession !== state.preview.sessionId) {
+          if (pdfDoc) try { pdfDoc.destroy(); } catch (e) {}
+          return;
+        }
+        state.preview.doc = pdfDoc;
+        state.preview.totalPages = pdfDoc.numPages || 1;
+        state.preview.pageNum = 1;
+        state.preview.fitWidth = true;
+        renderCurrentPdfPage();
+      })
+      .catch(function (err) {
+        if (mySession !== state.preview.sessionId) return;
+        const msg = (err && err.message) || 'Error al abrir la vista previa.';
+        setPreviewStatus(msg + ' Puedes usar «Abrir en pestaña» o «Descargar PDF» abajo.', true);
+      });
+  }
+
+  function downloadAllAsZip() {
+    const doneJobs = state.jobs.filter(function (j) { return j.status === 'done' && j.pdfBlob; });
+    if (doneJobs.length === 0) return;
+
+    const btn = document.getElementById('downloadZipBtn');
+    const prevText = btn ? btn.textContent : 'Descargar ZIP';
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Empaquetando ZIP...';
+    }
+
+    const usedNames = Object.create(null);
+    Promise.all(doneJobs.map(function (job) {
+      return job.pdfBlob.arrayBuffer().then(function (buf) {
+        return {
+          name: makeUniqueZipName(job.pdfFileName, usedNames),
+          bytes: new Uint8Array(buf)
+        };
+      });
+    }))
+      .then(function (entries) {
+        const zipBlob = buildZipBlob(entries);
+        const zipUrl = URL.createObjectURL(zipBlob);
+        const now = new Date();
+        const pad = function (n) { return String(n).padStart(2, '0'); };
+        const stamp = now.getFullYear() + pad(now.getMonth() + 1) + pad(now.getDate()) +
+          '-' + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
+        const zipName = 'Doc2PDF_' + stamp + '.zip';
+
+        triggerBlobDownload(zipUrl, zipName);
+        showToast('Descargando ' + zipName + ' (' + entries.length + ' PDF).');
+        setTimeout(function () { URL.revokeObjectURL(zipUrl); }, 60000);
+      })
+      .catch(function () {
+        showToast('No se pudo generar el archivo ZIP.', true);
+      })
+      .then(function () {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = prevText;
+        }
+      });
   }
 
   function downloadAllCompleted() {
@@ -786,6 +1242,7 @@
       if (state.jobs[i].pdfUrl) {
         URL.revokeObjectURL(state.jobs[i].pdfUrl);
       }
+      state.jobs[i].pdfBlob = null;
     }
     state.jobs = [];
     renderQueue();
@@ -796,6 +1253,7 @@
     const section = document.getElementById('queueSection');
     const listEl = document.getElementById('queueList');
     const titleEl = document.getElementById('queueTitle');
+    const downloadZipBtn = document.getElementById('downloadZipBtn');
     const downloadAllBtn = document.getElementById('downloadAllBtn');
 
     if (state.jobs.length === 0) {
@@ -807,6 +1265,7 @@
     section.classList.remove('hidden');
     const doneCount = state.jobs.filter(function (j) { return j.status === 'done'; }).length;
     titleEl.textContent = 'Trabajos (' + doneCount + '/' + state.jobs.length + ' completados)';
+    downloadZipBtn.classList.toggle('hidden', doneCount < 2);
     downloadAllBtn.classList.toggle('hidden', doneCount < 2);
 
     listEl.innerHTML = '';
@@ -878,12 +1337,22 @@
       btns.className = 'job-buttons';
 
       if (job.status === 'done' && job.pdfUrl) {
-        const prevBtn = document.createElement('button');
-        prevBtn.type = 'button';
-        prevBtn.className = 'btn-sm';
-        prevBtn.textContent = 'Vista previa';
-        prevBtn.addEventListener('click', function () { openPreview(job.id); });
-        btns.appendChild(prevBtn);
+        if (state.config && state.config.embeddedPdfViewer) {
+          const prevBtn = document.createElement('button');
+          prevBtn.type = 'button';
+          prevBtn.className = 'btn-sm';
+          prevBtn.textContent = 'Vista previa';
+          prevBtn.addEventListener('click', function () { openPreview(job.id); });
+          btns.appendChild(prevBtn);
+        } else {
+          const openTabA = document.createElement('a');
+          openTabA.className = 'btn-sm';
+          openTabA.href = job.pdfUrl;
+          openTabA.target = '_blank';
+          openTabA.rel = 'noopener';
+          openTabA.textContent = 'Abrir PDF';
+          btns.appendChild(openTabA);
+        }
 
         const dlA = document.createElement('a');
         dlA.className = 'btn-sm primary';

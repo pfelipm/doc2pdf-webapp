@@ -210,7 +210,8 @@
         <div class="queue-head">
           <h2 id="queueTitle" class="queue-title">Cola de conversiones</h2>
           <div class="queue-actions">
-            <button type="button" class="btn-sm primary hidden" id="downloadAllBtn">Descargar todos</button>
+            <button type="button" class="btn-sm primary hidden" id="downloadZipBtn">Descargar ZIP</button>
+            <button type="button" class="btn-sm hidden" id="downloadAllBtn">Descargar por separado</button>
             <button type="button" class="btn-sm" id="clearQueueBtn">Limpiar lista</button>
           </div>
         </div>
@@ -223,17 +224,32 @@
       <span>Conversión nativa Google Workspace · <?= appVersion ?></span>
     </footer>
 
-    <!-- Modal nativo de vista previa PDF -->
+    <!-- Modal nativo de vista previa PDF (PDF.js sobre canvas) -->
     <dialog id="previewDialog" closedby="any" aria-labelledby="previewTitle">
       <div class="dialog-head">
         <h2 id="previewTitle">Vista previa PDF</h2>
         <button type="button" class="btn-sm" id="closePreviewBtn" autofocus>Cerrar</button>
       </div>
-      <div class="dialog-body" style="display:flex; flex-direction:column; gap:10px;">
-        <iframe id="previewFrame" title="Vista previa del documento PDF"></iframe>
+      <div class="dialog-body preview-dialog-body">
+        <div class="preview-toolbar" aria-label="Controles del visor PDF">
+          <div class="preview-toolbar-group">
+            <button type="button" class="btn-sm" id="pdfPrevBtn" aria-label="Página anterior" disabled>◀</button>
+            <span id="pdfPageInfo" class="preview-page-info">Página 1 / 1</span>
+            <button type="button" class="btn-sm" id="pdfNextBtn" aria-label="Página siguiente" disabled>▶</button>
+          </div>
+          <div class="preview-toolbar-group">
+            <button type="button" class="btn-sm" id="pdfZoomOutBtn" aria-label="Reducir zoom">−</button>
+            <button type="button" class="btn-sm" id="pdfZoomFitBtn" aria-label="Ajustar al ancho">Ajustar</button>
+            <button type="button" class="btn-sm" id="pdfZoomInBtn" aria-label="Ampliar zoom">+</button>
+          </div>
+        </div>
+        <div id="previewStage" class="preview-stage">
+          <div id="previewStatus" class="preview-status hidden" role="status"></div>
+          <canvas id="previewCanvas" class="hidden"></canvas>
+        </div>
       </div>
       <div class="dialog-foot">
-        <span id="previewMeta" style="font-size:12px; color:var(--muted);">Si tu navegador restringe la vista previa embebida, usa los botones de descarga o nueva pestaña.</span>
+        <span id="previewMeta" style="font-size:12px; color:var(--muted);">Renderizado en el navegador sin enviar el PDF a servidores externos.</span>
         <div style="display:flex; gap:8px;">
           <a id="previewNewTabLink" class="btn-sm" target="_blank" rel="noopener">Abrir en pestaña</a>
           <a id="previewDownloadLink" class="btn-sm primary">Descargar PDF</a>
