@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/banner.jpg" alt="Doc2PDF WebApp — Conversor nativo de documentos a PDF para Google Workspace" width="100%" />
+</p>
+
 # Doc2PDF WebApp
 
 Microservicio web ligero e interno para **Google Workspace** desarrollado íntegramente en **Google Apps Script** (sin bibliotecas ni servidores externos) que permite convertir documentos de escritorio a **PDF** desde una interfaz web moderna, controlada desde una hoja de cálculo de administración.
@@ -49,6 +53,8 @@ La raíz del repositorio Git y de `clasp` vive dentro de `src/`, dejando libre e
 
 ```text
 src/
+├── assets/
+│   └── banner.jpg           # Banner del repositorio (1376×688, proporción 2:1)
 ├── .clasp.json.example      # Plantilla de configuración para clasp (rootDir: ".")
 ├── .claspignore
 ├── .gitignore
