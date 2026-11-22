@@ -202,11 +202,25 @@
     }, 4200);
   }
 
+  function formatLocaleNumber(val, minDec, maxDec) {
+    const n = Number(val);
+    if (!isFinite(n)) return '0';
+    const loc = (state.config && state.config.locale) || 'es-ES';
+    const opts = {};
+    if (typeof minDec === 'number') opts.minimumFractionDigits = minDec;
+    if (typeof maxDec === 'number') opts.maximumFractionDigits = maxDec;
+    try {
+      return new Intl.NumberFormat(loc, opts).format(n);
+    } catch (e) {
+      return new Intl.NumberFormat('es-ES', opts).format(n);
+    }
+  }
+
   function formatBytes(bytes) {
     if (!bytes || bytes <= 0) return '0 B';
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    if (bytes < 1024) return formatLocaleNumber(bytes, 0, 0) + ' B';
+    if (bytes < 1024 * 1024) return formatLocaleNumber(bytes / 1024, 1, 1) + ' KB';
+    return formatLocaleNumber(bytes / (1024 * 1024), 2, 2) + ' MB';
   }
 
   function getExt(name) {
@@ -1310,7 +1324,7 @@
         const sizeDiff = job.inputSizeBytes > 0
           ? formatBytes(job.inputSizeBytes) + ' → ' + formatBytes(job.pdfSizeBytes)
           : formatBytes(job.pdfSizeBytes);
-        const durSec = job.durationMs ? ' · ' + (job.durationMs / 1000).toFixed(1) + ' s' : '';
+        const durSec = job.durationMs ? ' · ' + formatLocaleNumber(job.durationMs / 1000, 1, 1) + ' s' : '';
         meta.textContent = sizeDiff + durSec;
       } else if (job.status === 'error') {
         meta.textContent = job.errorText || job.stageText;
@@ -1354,19 +1368,26 @@
           btns.appendChild(openTabA);
         }
 
+        if (job.family === 'HOJAS') {
+          const reconvBtn = document.createElement('button');
+          reconvBtn.type = 'button';
+          reconvBtn.className = 'btn-sm';
+          reconvBtn.textContent = 'Reconvertir';
+          reconvBtn.addEventListener('click', function () { retryJob(job.id); });
+          btns.appendChild(reconvBtn);
+        }
+
         const dlA = document.createElement('a');
         dlA.className = 'btn-sm primary';
         dlA.href = job.pdfUrl;
         dlA.download = job.pdfFileName;
         dlA.textContent = 'Descargar';
         btns.appendChild(dlA);
-      }
-
-      if ((job.status === 'done' && job.family === 'HOJAS') || (job.status === 'error' && (job.file || job.driveUrl))) {
+      } else if (job.status === 'error' && (job.file || job.driveUrl)) {
         const retryBtn = document.createElement('button');
         retryBtn.type = 'button';
         retryBtn.className = 'btn-sm';
-        retryBtn.textContent = job.status === 'done' ? 'Reconvertir' : 'Reintentar';
+        retryBtn.textContent = 'Reintentar';
         retryBtn.addEventListener('click', function () { retryJob(job.id); });
         btns.appendChild(retryBtn);
       }

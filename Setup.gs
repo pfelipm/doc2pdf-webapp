@@ -193,11 +193,13 @@ function executeSetupSheet_(options) {
     auditSheet.insertColumnsAfter(auditSheet.getMaxColumns(), auditCols - auditSheet.getMaxColumns());
   }
 
-  if (auditSheet.getLastRow() === 0) {
-    auditSheet.getRange(1, 1, 1, auditCols).setValues([AUDIT_HEADERS]);
-  }
+  auditSheet.getRange(1, 1, 1, auditCols).setValues([AUDIT_HEADERS]);
 
   styleAuditHeader_(auditSheet);
+  if (auditSheet.getLastRow() >= 2) {
+    auditSheet.getRange(2, 1, auditSheet.getLastRow() - 1, 1).setNumberFormat(getRegionalDateTimeFormat_(ss));
+    clearColumnLinksAsPlainText_(auditSheet, 2, auditSheet.getLastRow() - 1, 5);
+  }
 
   const targetAuditRows = Math.max(2, auditSheet.getLastRow());
   const targetAuditCols = Math.max(auditCols, auditSheet.getLastColumn());
@@ -371,8 +373,9 @@ function showDashboardDialog() {
   template.appName = cfg.NOMBRE_APP;
   template.accentColor = cfg.COLOR_ACENTO;
   template.version = APP_VERSION;
+  template.locale = getSpreadsheetLocaleBcp47_(getSpreadsheet_());
   template.dialogToken = createAdminDialogToken_(adminEmail);
-  const html = template.evaluate().setWidth(960).setHeight(660);
+  const html = template.evaluate().setWidth(1040).setHeight(960);
   SpreadsheetApp.getUi().showModalDialog(html, ' ');
 }
 

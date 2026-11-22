@@ -145,6 +145,30 @@ La pestaña `Ajustes` incorpora validaciones estrictas de datos sobre sus 21 par
 
 ---
 
+## Limitaciones conocidas
+
+Doc2PDF prioriza un despliegue simple, sin servidores intermedios ni mantenimiento de infraestructura externa, asumiendo a cambio las restricciones propias de Google Apps Script y del motor de conversión de Google Workspace.
+
+### Calidad y fidelidad de la conversión
+
+- **Motor basado en importación/exportación de Google Workspace:** Doc2PDF no utiliza Microsoft Office ni LibreOffice. Para convertir, importa temporalmente el documento al formato nativo equivalente de Google (Docs, Sheets o Slides) y lo exporta a PDF. Es una solución práctica para el día a día, pero no replica al 100 % el renderizado del programa de escritorio original.
+- **Maquetación compleja y tipografías:** en archivos `.docx` o `.pptx` que emplean fuentes no disponibles en Workspace, macros/VBA (`.xlsm`, que se omiten en la conversión), controles ActiveX, objetos SmartArt, fórmulas matemáticas complejas, cuadros de texto flotantes o encabezados y pies avanzados, pueden producirse sustituciones tipográficas, saltos de página distintos o ligeros desajustes visuales.
+- **Hojas de cálculo (`.xlsx`, `.ods`, `.csv`):** aunque la WebApp permite ajustar tamaño de papel, orientación, ajuste al ancho, cuadrícula y márgenes, las áreas de impresión complejas o saltos de página manuales definidos en Excel pueden diferir respecto a la exportación nativa.
+- **Texto y marcado (`.md`, `.html`, `.txt`):** la conversión mediante Drive aplica un renderizado básico; no ejecuta JavaScript, no resuelve hojas de estilo o recursos externos complejos ni interpreta extensiones avanzadas (como diagramas Mermaid o bloques LaTeX).
+- **Archivos cifrados o dañados:** documentos protegidos con contraseña, cifrado IRM/DRM o estructura corrupta fallarán durante la importación temporal en Drive.
+- **Uso recomendado:** pensado para tramitación interna y difusión ágil en centros educativos u organizaciones; cuando se requiera fidelidad tipográfica estricta o calidad de imprenta, conviene generar el PDF directamente desde la aplicación de origen.
+
+### Limitaciones de Google Apps Script y Workspace
+
+- **Límite de tamaño (`<= 45 MB`):** aunque la subida y descarga fragmentadas evitan los límites de `google.script.run` y el tope de `10 MB` de `Drive.Files.export`, Google Apps Script impone un máximo duro de **`50 MB`** en `UrlFetchApp` y memoria de ejecución. Tanto el archivo original como el PDF generado deben quedar por debajo de ese umbral (`TAMANO_MAX_MB` configurable entre `1` y `45 MB`).
+- **Tiempo máximo de ejecución (6 minutos) y latencia:** cada invocación dispone de un límite estricto de 6 minutos y está sujeta a arranques en frío (*cold starts*) más el tiempo que tarde Drive en importar y exportar el archivo; documentos muy extensos o cargados de imágenes pesadas pueden ralentizarse o alcanzar dicho límite.
+- **Concurrencia y cuotas compartidas (`USER_DEPLOYING`):** al ejecutarse bajo la cuenta administradora o funcional que despliega la WebApp, las cuotas de Apps Script (por ejemplo, el límite de **30 ejecuciones simultáneas por usuario** y los cupos diarios de `UrlFetchApp` y Drive API) se comparten entre todo el personal del dominio. El proyecto está dimensionado para uso interno departamental o de centro, no para tráfico concurrente masivo.
+- **Escalado de `Auditoría` en Google Sheets:** las escrituras se serializan con `LockService` (espera máxima de 15 s) para evitar colisiones, y la hoja de cálculo perderá fluidez si acumula decenas de miles de registros sin purga periódica (`RETENCION_AUDITORIA_DIAS`).
+- **Entorno *iframe* y multicuenta de Google:** las WebApps de Apps Script corren en un *iframe* aislado (`script.google.com`), por lo que sesiones del navegador con múltiples cuentas de Google abiertas a la vez pueden fallar si la cuenta principal del navegador no pertenece al dominio Workspace. Del mismo modo, las cabeceras de seguridad (`CSP` / `X-Frame-Options`) impiden incrustar un PDF nativo mediante `<iframe>` en ciertos navegadores (motivo por el que el visor embebido opcional usa PDF.js sobre `<canvas>` y el modo sin dependencias abre el PDF en una pestaña nueva).
+- **Endpoints de exportación de Docs/Sheets/Slides:** para evitar el límite de 10 MB de `Drive.Files.export`, la exportación utiliza las URLs de `docs.google.com/.../export` autenticadas con el token OAuth del script (`ScriptApp.getOAuthToken()`). Es una vía consolidada en Workspace, pero no forma parte de un contrato REST versionado como Drive API v3 y podría verse afectada si Google cambiara esos endpoints.
+
+---
+
 ## Licencia y autoría
 
 Desarrollado por **Pablo Felip** ([@pfelipm](https://pablofelip.online/sobre-mi/)) bajo licencia **GNU GPL v3.0** ([LICENSE](LICENSE)).

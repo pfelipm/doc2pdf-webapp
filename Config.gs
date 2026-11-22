@@ -645,6 +645,7 @@ function getPublicClientConfig_(userContext, config) {
     chunkSizeBytes: CHUNK_SIZE_BYTES,
     allowDriveLink: cfg.PERMITIR_ENLACE_DRIVE,
     embeddedPdfViewer: cfg.VISOR_PDF_EMBEBIDO,
+    locale: getSpreadsheetLocaleBcp47_(getSpreadsheet_()),
     auditNameMode: cfg.REGISTRAR_NOMBRE_ARCHIVO,
     enabledFamilies: cfg.FAMILIAS_HABILITADAS,
     familiesSummary: familiesSummary,

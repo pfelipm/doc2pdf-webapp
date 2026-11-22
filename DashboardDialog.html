@@ -526,7 +526,6 @@
           </svg>
           Actualizar
         </button>
-        <button type="button" class="icon-btn" onclick="google.script.host.close()">Cerrar</button>
       </div>
     </header>
 
@@ -545,7 +544,21 @@
 
     <script>
       const DIALOG_TOKEN = '<?= dialogToken ?>';
+      const DASH_LOCALE = '<?= locale ?>' || 'es-ES';
       let currentDays = 30;
+
+      function formatNum(val, minDec, maxDec) {
+        const n = Number(val);
+        if (!isFinite(n)) return '0';
+        const opts = {};
+        if (typeof minDec === 'number') opts.minimumFractionDigits = minDec;
+        if (typeof maxDec === 'number') opts.maximumFractionDigits = maxDec;
+        try {
+          return new Intl.NumberFormat(DASH_LOCALE, opts).format(n);
+        } catch (e) {
+          return new Intl.NumberFormat('es-ES', opts).format(n);
+        }
+      }
 
       function showDashAlert(msg) {
         const banner = document.getElementById('dashAlertBanner');
@@ -571,14 +584,14 @@
 
       function formatDuration(ms) {
         if (!ms) return '0 ms';
-        if (ms < 1000) return ms + ' ms';
-        return (ms / 1000).toFixed(1) + ' s';
+        if (ms < 1000) return formatNum(ms, 0, 0) + ' ms';
+        return formatNum(ms / 1000, 1, 1) + ' s';
       }
 
       function formatKb(kb) {
         if (!kb) return '0 KB';
-        if (kb >= 1024) return (kb / 1024).toFixed(2) + ' MB';
-        return kb.toFixed(1) + ' KB';
+        if (kb >= 1024) return formatNum(kb / 1024, 2, 2) + ' MB';
+        return formatNum(kb, 1, 1) + ' KB';
       }
 
       function changePeriod(days) {
@@ -744,7 +757,7 @@
           const fam = byFamily[i];
           legend += '<div class="donut-item">' +
             '<span class="donut-label"><span class="donut-swatch" style="background:' + escapeHtml(fam.color) + '"></span>' + escapeHtml(fam.label) + '</span>' +
-            '<span style="color:#475569;font-variant-numeric:tabular-nums;"><b>' + fam.count + '</b> (' + fam.percent + '%)</span>' +
+            '<span style="color:#475569;font-variant-numeric:tabular-nums;"><b>' + formatNum(fam.count, 0, 0) + '</b> (' + formatNum(fam.percent, 0, 1) + '%)</span>' +
             '</div>';
         }
 
@@ -752,7 +765,7 @@
           '<svg width="128" height="128" viewBox="0 0 128 128" style="flex-shrink:0" aria-label="Distribución por familia">' +
           '<circle cx="64" cy="64" r="' + r + '" fill="none" stroke="#f1f5f9" stroke-width="18"/>' +
           arcs +
-          '<text x="64" y="61" text-anchor="middle" font-size="20" font-weight="800" fill="#0f172a">' + totalCount + '</text>' +
+          '<text x="64" y="61" text-anchor="middle" font-size="20" font-weight="800" fill="#0f172a">' + formatNum(totalCount, 0, 0) + '</text>' +
           '<text x="64" y="77" text-anchor="middle" font-size="10.5" fill="#64748b">trabajos</text>' +
           '</svg>' +
           '<div class="donut-list">' + legend + '</div>' +
@@ -774,20 +787,20 @@
           '<span class="pill ' + (h.hasTrigger ? 'ok' : 'warn') + '"><span class="dot"></span>' + (h.hasTrigger ? 'Trigger diario activo' : 'Sin trigger diario') +
             (!h.hasTrigger ? ' <button type="button" class="mini-action" onclick="triggerInstallFromDash(this)">Instalar</button>' : '') +
           '</span>' +
-          '<span class="pill ' + ((h.tempFilesCount || 0) > 0 ? 'warn' : 'ok') + '"><span class="dot"></span>Temporales en Drive: ' + (h.tempFilesCount || 0) +
+          '<span class="pill ' + ((h.tempFilesCount || 0) > 0 ? 'warn' : 'ok') + '"><span class="dot"></span>Temporales en Drive: ' + formatNum(h.tempFilesCount || 0, 0, 0) +
             ((h.tempFilesCount || 0) > 0 ? ' <button type="button" class="mini-action" onclick="purgeTempFromDash(this)">Purgar</button>' : '') +
           '</span>' +
-          '<span class="pill">Límites: ' + (h.maxSizeMB || 20) + ' MB · ' + (h.dailyLimit ? h.dailyLimit + '/día' : 'Sin cuota') + ' · Auditoría: ' + escapeHtml(h.auditNameMode || 'COMPLETO') + '</span>' +
+          '<span class="pill">Límites: ' + formatNum(h.maxSizeMB || 20, 0, 1) + ' MB · ' + (h.dailyLimit ? formatNum(h.dailyLimit, 0, 0) + '/día' : 'Sin cuota') + ' · Auditoría: ' + escapeHtml(h.auditNameMode || 'COMPLETO') + '</span>' +
           '<span class="updated-at">Actualizado: ' + escapeHtml(data.generatedAt) + '</span>' +
           '</section>';
 
         // 5 KPIs
         html += '<section class="kpi-grid">' +
-          '<div class="kpi-card"><div class="kpi-top"><span>Total trabajos</span></div><div class="kpi-val">' + k.total + '</div><div class="kpi-sub">' + k.ok + ' OK · ' + k.error + ' err · ' + k.rejected + ' rech.</div></div>' +
-          '<div class="kpi-card"><div class="kpi-top"><span>Tasa de éxito</span></div><div class="kpi-val">' + k.successRate + '%</div><div class="kpi-bar"><span style="width:' + Math.min(100, k.successRate) + '%"></span></div></div>' +
-          '<div class="kpi-card"><div class="kpi-top"><span>Conversiones hoy</span></div><div class="kpi-val">' + k.todayCount + '</div><div class="kpi-sub">Trabajos OK en la fecha actual</div></div>' +
-          '<div class="kpi-card"><div class="kpi-top"><span>Usuarios únicos</span></div><div class="kpi-val">' + k.uniqueUsers + '</div><div class="kpi-sub">Cuentas activas en el periodo</div></div>' +
-          '<div class="kpi-card"><div class="kpi-top"><span>Tiempo medio</span></div><div class="kpi-val">' + formatDuration(k.avgDurationMs) + '</div><div class="kpi-sub">p95: ' + formatDuration(k.p95DurationMs) + ' · ' + k.totalPdfMB + ' MB PDF</div></div>' +
+          '<div class="kpi-card"><div class="kpi-top"><span>Total trabajos</span></div><div class="kpi-val">' + formatNum(k.total, 0, 0) + '</div><div class="kpi-sub">' + formatNum(k.ok, 0, 0) + ' OK · ' + formatNum(k.error, 0, 0) + ' err · ' + formatNum(k.rejected, 0, 0) + ' rech.</div></div>' +
+          '<div class="kpi-card"><div class="kpi-top"><span>Tasa de éxito</span></div><div class="kpi-val">' + formatNum(k.successRate, 0, 1) + '%</div><div class="kpi-bar"><span style="width:' + Math.min(100, k.successRate) + '%"></span></div></div>' +
+          '<div class="kpi-card"><div class="kpi-top"><span>Conversiones hoy</span></div><div class="kpi-val">' + formatNum(k.todayCount, 0, 0) + '</div><div class="kpi-sub">Trabajos OK en la fecha actual</div></div>' +
+          '<div class="kpi-card"><div class="kpi-top"><span>Usuarios únicos</span></div><div class="kpi-val">' + formatNum(k.uniqueUsers, 0, 0) + '</div><div class="kpi-sub">Cuentas activas en el periodo</div></div>' +
+          '<div class="kpi-card"><div class="kpi-top"><span>Tiempo medio</span></div><div class="kpi-val">' + formatDuration(k.avgDurationMs) + '</div><div class="kpi-sub"><span title="Percentil 95: el 95 % de las conversiones tardaron este tiempo o menos" style="border-bottom:1px dotted currentColor;cursor:help;">p95</span>: ' + formatDuration(k.p95DurationMs) + ' · ' + formatNum(k.totalPdfMB, 2, 2) + ' MB PDF</div></div>' +
           '</section>';
 
         if ((h.totalAuditRows || 0) === 0) {
@@ -827,7 +840,7 @@
           extHtml += '<div class="hbar-row">' +
             '<span class="hbar-ext">.' + escapeHtml(item.ext) + '</span>' +
             '<div class="hbar-track"><div class="hbar-fill" style="width:' + widthPct + '%"></div></div>' +
-            '<span class="hbar-num">' + item.count + '</span>' +
+            '<span class="hbar-num">' + formatNum(item.count, 0, 0) + '</span>' +
             '</div>';
         }
 
@@ -837,7 +850,7 @@
           const initials = (u.email.slice(0, 2) || 'US').toUpperCase();
           usersHtml += '<div class="user-row">' +
             '<div class="user-left"><span class="avatar">' + escapeHtml(initials) + '</span><span class="user-email" title="' + escapeHtml(u.email) + '">' + escapeHtml(u.email) + '</span></div>' +
-            '<div class="user-stats"><b>' + u.total + '</b><span class="rate-badge">' + u.successRate + '% OK</span></div>' +
+            '<div class="user-stats"><b>' + formatNum(u.total, 0, 0) + '</b><span class="rate-badge">' + formatNum(u.successRate, 0, 1) + '% OK</span></div>' +
             '</div>';
         }
 
@@ -845,7 +858,7 @@
           '<div class="panel">' +
             '<div class="panel-head"><h2 class="panel-title">Origen y formatos principales</h2></div>' +
             '<div class="origin-split">' +
-              '<div class="origin-labels"><span>Archivo local: ' + data.byOrigin.local + ' (' + localPct + '%)</span><span>Enlace Drive: ' + data.byOrigin.drive + ' (' + drivePct + '%)</span></div>' +
+              '<div class="origin-labels"><span>Archivo local: ' + formatNum(data.byOrigin.local, 0, 0) + ' (' + formatNum(localPct, 0, 0) + '%)</span><span>Enlace Drive: ' + formatNum(data.byOrigin.drive, 0, 0) + ' (' + formatNum(drivePct, 0, 0) + '%)</span></div>' +
               '<div class="origin-bar"><div style="width:' + localPct + '%;background:#1a73e8"></div><div style="width:' + drivePct + '%;background:#0ea5e9"></div></div>' +
             '</div>' +
             '<div class="hbar-list">' + (extHtml || '<span style="color:#64748b">Sin extensiones registradas</span>') + '</div>' +
@@ -898,7 +911,7 @@
             const idx = Number(e.target.getAttribute('data-idx'));
             const item = series[idx];
             if (!item) return;
-            tip.textContent = item.label + ': ' + item.ok + ' OK · ' + item.rejected + ' rech. · ' + item.error + ' err.';
+            tip.textContent = item.label + ': ' + formatNum(item.ok, 0, 0) + ' OK · ' + formatNum(item.rejected, 0, 0) + ' rech. · ' + formatNum(item.error, 0, 0) + ' err.';
             tip.classList.add('visible');
           });
           hits[i].addEventListener('mousemove', function (e) {

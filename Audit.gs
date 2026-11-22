@@ -5,8 +5,8 @@
  */
 
 const AUDIT_HEADERS = [
-  'Timestamp',
-  'Job ID',
+  'Marca temporal',
+  'ID trabajo',
   'Usuario',
   'Origen',
   'Archivo',
@@ -106,7 +106,7 @@ function styleAuditHeader_(sheet) {
   sheet.setRowHeight(1, 34);
   sheet.setFrozenRows(1);
 
-  const widths = [155, 185, 220, 108, 240, 118, 136, 196, 168, 148, 110, 260, 200];
+  const widths = [170, 185, 220, 108, 240, 118, 136, 196, 168, 148, 110, 260, 200];
   for (let i = 0; i < widths.length; i++) {
     sheet.setColumnWidth(i + 1, widths[i]);
   }
@@ -147,7 +147,8 @@ function logAuditJob_(entry, config) {
     sheet.appendRow(row);
     const lastRow = sheet.getLastRow();
     if (lastRow >= 2) {
-      sheet.getRange(lastRow, 1).setNumberFormat('yyyy-mm-dd hh:mm:ss');
+      sheet.getRange(lastRow, 1).setNumberFormat(getRegionalDateTimeFormat_(ss));
+      setPlainTextNoLink_(sheet.getRange(lastRow, 5), row[4]);
       sheet.getRange(lastRow, 8, 1, 2).setNumberFormat('#,##0.0');
       sheet.getRange(lastRow, 10).setNumberFormat('#,##0');
     }
@@ -197,7 +198,8 @@ function purgeOldAuditRows_(retentionDays) {
       sheet.getRange(2, 1, lastRow - 1, AUDIT_HEADERS.length).clearContent();
       if (keptRows.length > 0) {
         sheet.getRange(2, 1, keptRows.length, AUDIT_HEADERS.length).setValues(keptRows);
-        sheet.getRange(2, 1, keptRows.length, 1).setNumberFormat('yyyy-mm-dd hh:mm:ss');
+        sheet.getRange(2, 1, keptRows.length, 1).setNumberFormat(getRegionalDateTimeFormat_(ss));
+        clearColumnLinksAsPlainText_(sheet, 2, keptRows.length, 5);
         sheet.getRange(2, 8, keptRows.length, 2).setNumberFormat('#,##0.0');
         sheet.getRange(2, 10, keptRows.length, 1).setNumberFormat('#,##0');
       }
@@ -209,11 +211,120 @@ function purgeOldAuditRows_(retentionDays) {
 }
 
 /**
- * Formatea una fecha a yyyy-MM-dd usando zona Europe/Madrid (compatible con Node en tests).
+ * Devuelve la zona horaria configurada en la hoja de cálculo contenedora
+ * (con respaldo a la zona del script y Europe/Madrid).
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet=} ssOpt
+ * @return {string}
+ */
+function getLocalTimeZone_(ssOpt) {
+  try {
+    const ss = ssOpt || getSpreadsheet_();
+    if (ss && typeof ss.getSpreadsheetTimeZone === 'function') {
+      const tz = String(ss.getSpreadsheetTimeZone() || '').trim();
+      if (tz) return tz;
+    }
+  } catch (e) {}
+  try {
+    if (typeof Session !== 'undefined' && Session && typeof Session.getScriptTimeZone === 'function') {
+      const scriptTz = String(Session.getScriptTimeZone() || '').trim();
+      if (scriptTz) return scriptTz;
+    }
+  } catch (e) {}
+  return 'Europe/Madrid';
+}
+
+/**
+ * Devuelve el formato de fecha/hora acorde con la configuración regional de la hoja.
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet=} ssOpt
+ * @return {string}
+ */
+function getRegionalDateTimeFormat_(ssOpt) {
+  let locale = '';
+  try {
+    const ss = ssOpt || getSpreadsheet_();
+    if (ss && typeof ss.getSpreadsheetLocale === 'function') {
+      locale = String(ss.getSpreadsheetLocale() || '').trim().toLowerCase();
+    }
+  } catch (e) {}
+
+  if (locale === 'en_us' || locale === 'en_ph' || locale === 'en_bz') {
+    return 'mm/dd/yyyy hh:mm:ss';
+  }
+  if (/^(ja|zh|ko|hu|sv|lt)(_|$)/.test(locale)) {
+    return 'yyyy/mm/dd hh:mm:ss';
+  }
+  return 'dd/mm/yyyy hh:mm:ss';
+}
+
+/**
+ * Devuelve el identificador BCP 47 de configuración regional de la hoja (p. ej. 'es-ES').
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet=} ssOpt
+ * @return {string}
+ */
+function getSpreadsheetLocaleBcp47_(ssOpt) {
+  try {
+    const ss = ssOpt || getSpreadsheet_();
+    if (ss && typeof ss.getSpreadsheetLocale === 'function') {
+      const raw = String(ss.getSpreadsheetLocale() || '').trim();
+      if (raw) {
+        return raw.replace(/_/g, '-');
+      }
+    }
+  } catch (e) {}
+  return 'es-ES';
+}
+
+/**
+ * Escribe texto plano en una celda desactivando la conversión automática de enlaces (p. ej. *.md).
+ * @param {GoogleAppsScript.Spreadsheet.Range} range
+ * @param {*} text
+ */
+function setPlainTextNoLink_(range, text) {
+  if (!range) return;
+  const str = text === null || text === undefined ? '' : String(text);
+  range.setNumberFormat('@');
+  if (typeof SpreadsheetApp !== 'undefined' && typeof SpreadsheetApp.newRichTextValue === 'function' && typeof range.setRichTextValue === 'function') {
+    const builder = SpreadsheetApp.newRichTextValue().setText(str);
+    if (str) {
+      builder.setLinkUrl(null);
+    }
+    range.setRichTextValue(builder.build());
+  }
+}
+
+/**
+ * Limpia hipervínculos automáticos en una columna completa y la fuerza a formato texto plano ('@').
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet
+ * @param {number} startRow
+ * @param {number} numRows
+ * @param {number} colIndex
+ */
+function clearColumnLinksAsPlainText_(sheet, startRow, numRows, colIndex) {
+  if (!sheet || numRows <= 0) return;
+  const range = sheet.getRange(startRow, colIndex, numRows, 1);
+  range.setNumberFormat('@');
+  if (typeof SpreadsheetApp === 'undefined' || typeof SpreadsheetApp.newRichTextValue !== 'function' || typeof range.setRichTextValues !== 'function') {
+    return;
+  }
+  const values = range.getValues();
+  const richValues = [];
+  for (let i = 0; i < values.length; i++) {
+    const str = values[i][0] === null || values[i][0] === undefined ? '' : String(values[i][0]);
+    const builder = SpreadsheetApp.newRichTextValue().setText(str);
+    if (str) {
+      builder.setLinkUrl(null);
+    }
+    richValues.push([builder.build()]);
+  }
+  range.setRichTextValues(richValues);
+}
+
+/**
+ * Formatea una fecha a yyyy-MM-dd usando la zona horaria local de la hoja (compatible con Node en tests).
  */
 function formatIsoDay_(dateObj) {
   if (typeof Utilities !== 'undefined' && Utilities.formatDate) {
-    return Utilities.formatDate(dateObj, 'Europe/Madrid', 'yyyy-MM-dd');
+    return Utilities.formatDate(dateObj, getLocalTimeZone_(), 'yyyy-MM-dd');
   }
   const y = dateObj.getFullYear();
   const m = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -222,11 +333,11 @@ function formatIsoDay_(dateObj) {
 }
 
 /**
- * Formatea una marca temporal legible para la tabla del Dashboard.
+ * Formatea una marca temporal legible en zona local para la tabla del Dashboard.
  */
 function formatTimestampDisplay_(dateObj) {
   if (typeof Utilities !== 'undefined' && Utilities.formatDate) {
-    return Utilities.formatDate(dateObj, 'Europe/Madrid', 'dd/MM HH:mm');
+    return Utilities.formatDate(dateObj, getLocalTimeZone_(), 'dd/MM HH:mm');
   }
   const dd = String(dateObj.getDate()).padStart(2, '0');
   const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
