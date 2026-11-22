@@ -1,0 +1,917 @@
+<script>
+(function () {
+  'use strict';
+
+  const THEME_STORAGE_KEY = 'doc2pdf-color-scheme';
+  const DIRECT_CONCURRENCY = 2;
+
+  const state = {
+    config: null,
+    jobs: [],
+    activeDirect: 0,
+    activeChunked: false,
+    previewUrl: '',
+    currentTab: 'local'
+  };
+
+  /* -------------------------------------------------------------------------
+   * Gestión de tema (dark-mode-toggle según modern-web-guidance)
+   * ---------------------------------------------------------------------- */
+  function initThemeControls() {
+    const meta = document.querySelector('meta[name="color-scheme"]');
+    const btn = document.getElementById('themeToggleBtn');
+    const darkMq = window.matchMedia('(prefers-color-scheme: dark)');
+
+    function syncAria() {
+      const stored = safeGetStorage(THEME_STORAGE_KEY);
+      const rendered = stored || (darkMq.matches ? 'dark' : 'light');
+      btn.setAttribute('aria-pressed', rendered === 'dark' ? 'true' : 'false');
+    }
+
+    btn.addEventListener('click', function () {
+      const stored = safeGetStorage(THEME_STORAGE_KEY);
+      const systemScheme = darkMq.matches ? 'dark' : 'light';
+      const currentRendered = stored || systemScheme;
+      const targetScheme = currentRendered === 'dark' ? 'light' : 'dark';
+
+      if (targetScheme === systemScheme) {
+        safeRemoveStorage(THEME_STORAGE_KEY);
+        meta.content = 'light dark';
+      } else {
+        safeSetStorage(THEME_STORAGE_KEY, targetScheme);
+        meta.content = targetScheme;
+      }
+      syncAria();
+    });
+
+    window.addEventListener('storage', function (ev) {
+      if (ev.key === THEME_STORAGE_KEY) {
+        meta.content = ev.newValue || 'light dark';
+        syncAria();
+      }
+    });
+
+    darkMq.addEventListener('change', syncAria);
+    syncAria();
+  }
+
+  function safeGetStorage(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
+  }
+  function safeSetStorage(key, val) {
+    try { localStorage.setItem(key, val); } catch (e) {}
+  }
+  function safeRemoveStorage(key) {
+    try { localStorage.removeItem(key); } catch (e) {}
+  }
+
+  /* -------------------------------------------------------------------------
+   * Diálogos nativos <dialog> + fallback light-dismiss Safari
+   * ---------------------------------------------------------------------- */
+  function initDialogs() {
+    const dialogs = document.querySelectorAll('dialog');
+    const supportsClosedBy = 'closedBy' in HTMLDialogElement.prototype;
+
+    for (let i = 0; i < dialogs.length; i++) {
+      const dlg = dialogs[i];
+
+      dlg.addEventListener('close', function () {
+        if (dlg.id === 'previewDialog') {
+          const frame = document.getElementById('previewFrame');
+          if (frame) frame.src = 'about:blank';
+        }
+        dlg.returnValue = '';
+      });
+
+      if (!supportsClosedBy && dlg.getAttribute('closedby') === 'any') {
+        let pressedOutside = false;
+        const isOutside = function (ev) {
+          const r = dlg.getBoundingClientRect();
+          return ev.clientX < r.left || ev.clientX > r.right || ev.clientY < r.top || ev.clientY > r.bottom;
+        };
+        dlg.addEventListener('pointerdown', function (ev) {
+          pressedOutside = isOutside(ev);
+        });
+        dlg.addEventListener('pointerup', function (ev) {
+          if (pressedOutside && isOutside(ev)) {
+            dlg.close();
+          }
+          pressedOutside = false;
+        });
+      }
+    }
+
+    document.getElementById('closePreviewBtn').addEventListener('click', function () {
+      document.getElementById('previewDialog').close();
+    });
+    document.getElementById('closeFormatsBtn').addEventListener('click', function () {
+      document.getElementById('formatsDialog').close();
+    });
+    document.getElementById('openFormatsBtn').addEventListener('click', function () {
+      document.getElementById('formatsDialog').showModal();
+    });
+  }
+
+  /* -------------------------------------------------------------------------
+   * Utilidades generales
+   * ---------------------------------------------------------------------- */
+  function runServer(fnName, arg) {
+    return new Promise(function (resolve, reject) {
+      const runner = google.script.run
+        .withSuccessHandler(function (res) {
+          if (res && res.success) {
+            resolve(res.data);
+          } else {
+            reject(new Error((res && res.error) || 'Error inesperado del servidor.'));
+          }
+        })
+        .withFailureHandler(function (err) {
+          reject(new Error((err && err.message) || 'Error de comunicación con Google Apps Script.'));
+        });
+
+      if (typeof arg === 'undefined') {
+        runner[fnName]();
+      } else {
+        runner[fnName](arg);
+      }
+    });
+  }
+
+  function showToast(msg, isError) {
+    const region = document.getElementById('toastRegion');
+    const el = document.createElement('div');
+    el.className = 'toast' + (isError ? ' err' : '');
+    el.textContent = msg;
+    region.appendChild(el);
+    setTimeout(function () {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    }, 4200);
+  }
+
+  function formatBytes(bytes) {
+    if (!bytes || bytes <= 0) return '0 B';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  }
+
+  function getExt(name) {
+    const idx = String(name || '').lastIndexOf('.');
+    return idx > 0 && idx < name.length - 1 ? name.slice(idx + 1).toLowerCase() : '';
+  }
+
+  function blobToBase64(blob) {
+    return new Promise(function (resolve, reject) {
+      const reader = new FileReader();
+      reader.onload = function () {
+        const res = String(reader.result || '');
+        const comma = res.indexOf(',');
+        resolve(comma !== -1 ? res.slice(comma + 1) : res);
+      };
+      reader.onerror = function () {
+        reject(new Error('No se pudo leer el archivo local.'));
+      };
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  function base64ToUint8Array(b64) {
+    const bin = atob(b64);
+    const len = bin.length;
+    const arr = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      arr[i] = bin.charCodeAt(i);
+    }
+    return arr;
+  }
+
+  function readSheetOptions() {
+    return {
+      size: document.getElementById('optPaperSize').value,
+      portrait: document.getElementById('optOrientation').value === 'portrait',
+      scale: document.getElementById('optScale').value,
+      margins: document.getElementById('optMargins').value,
+      gridlines: document.getElementById('optGridlines').checked
+    };
+  }
+
+  function triggerBlobDownload(blobUrl, fileName) {
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = fileName || 'documento.pdf';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  /* -------------------------------------------------------------------------
+   * Inicialización y bootstrap desde servidor
+   * ---------------------------------------------------------------------- */
+  function bootstrap() {
+    runServer('apiGetBootstrap')
+      .then(function (cfg) {
+        state.config = cfg;
+        applyConfigToUi(cfg);
+      })
+      .catch(function (err) {
+        document.getElementById('loadingSection').classList.add('hidden');
+        document.getElementById('blockedSection').classList.remove('hidden');
+        document.getElementById('blockedTitle').textContent = 'No se pudo iniciar la aplicación';
+        document.getElementById('blockedMessage').textContent = err.message;
+      });
+  }
+
+  function applyConfigToUi(cfg) {
+    document.documentElement.style.setProperty('--accent', cfg.accentColor || '#1a73e8');
+    document.getElementById('appTitleHeading').textContent = cfg.appName;
+    document.getElementById('appSubtitle').textContent = cfg.subtitle || '';
+
+    if (cfg.logoUrl) {
+      const logo = document.getElementById('brandLogo');
+      const svg = document.getElementById('brandSvg');
+      logo.onload = function () {
+        logo.classList.remove('hidden');
+        svg.classList.add('hidden');
+      };
+      logo.onerror = function () {
+        logo.classList.add('hidden');
+        svg.classList.remove('hidden');
+      };
+      logo.src = cfg.logoUrl;
+    }
+
+    updateUserBadge(cfg.user);
+    renderFormatsInfo(cfg);
+
+    document.getElementById('loadingSection').classList.add('hidden');
+
+    if (!cfg.user || !cfg.user.allowed) {
+      document.getElementById('blockedSection').classList.remove('hidden');
+      document.getElementById('blockedTitle').textContent =
+        cfg.user && cfg.user.code === 'MAINTENANCE' ? 'Servicio en mantenimiento' : 'Acceso restringido';
+      document.getElementById('blockedMessage').textContent =
+        (cfg.user && cfg.user.reason) || cfg.maintenanceMessage;
+      return;
+    }
+
+    const maintBanner = document.getElementById('maintenanceAdminBanner');
+    if (cfg.user.code === 'MAINTENANCE_ADMIN_BYPASS') {
+      document.getElementById('maintenanceAdminText').textContent =
+        cfg.user.maintenanceBanner || 'Modo mantenimiento activo: solo el equipo administrador puede utilizar la aplicación actualmente.';
+      maintBanner.classList.remove('hidden');
+    } else {
+      maintBanner.classList.add('hidden');
+    }
+
+    document.getElementById('workspaceSection').classList.remove('hidden');
+    document.getElementById('maxSizeChip').textContent = 'Máx. ' + cfg.maxSizeMB + ' MB/archivo';
+    document.getElementById('maxBatchChip').textContent = 'Lote máx. ' + cfg.maxBatchFiles + ' archivos';
+
+    const acceptList = cfg.enabledFormats.map(function (f) { return '.' + f.ext; }).join(',');
+    document.getElementById('fileInput').setAttribute('accept', acceptList);
+
+    const chipsEl = document.getElementById('familyChips');
+    chipsEl.innerHTML = '';
+    for (let i = 0; i < cfg.familiesSummary.length; i++) {
+      const fam = cfg.familiesSummary[i];
+      const chip = document.createElement('span');
+      chip.className = 'fam-chip';
+      chip.textContent = fam.label + ' (' + fam.extensions.map(function (e) { return '.' + e; }).join(', ') + ')';
+      chipsEl.appendChild(chip);
+    }
+
+    if (!cfg.allowDriveLink) {
+      document.getElementById('tabDriveBtn').classList.add('hidden');
+    }
+  }
+
+  function updateUserBadge(user) {
+    if (!user) return;
+    const pill = document.getElementById('userPill');
+    const emailEl = document.getElementById('userEmailText');
+    const quotaEl = document.getElementById('quotaBadge');
+
+    emailEl.textContent = user.identityExposed ? user.email : 'Sesión Workspace';
+    if (user.dailyLimit > 0) {
+      const rem = typeof user.remainingToday === 'number' ? user.remainingToday : user.dailyLimit;
+      quotaEl.textContent = rem + '/' + user.dailyLimit + ' hoy';
+    } else {
+      quotaEl.textContent = 'Sin límite diario';
+    }
+    pill.classList.remove('hidden');
+  }
+
+  function decrementQuotaUi() {
+    if (!state.config || !state.config.user || !state.config.user.dailyLimit) return;
+    const u = state.config.user;
+    if (typeof u.remainingToday === 'number' && u.remainingToday > 0) {
+      u.remainingToday -= 1;
+      u.dailyUsed += 1;
+      updateUserBadge(u);
+    }
+  }
+
+  function renderFormatsInfo(cfg) {
+    const grid = document.getElementById('formatsGrid');
+    grid.innerHTML = '';
+    for (let i = 0; i < cfg.familiesSummary.length; i++) {
+      const fam = cfg.familiesSummary[i];
+      const box = document.createElement('div');
+      box.className = 'fmt-box';
+
+      const h3 = document.createElement('h3');
+      h3.textContent = fam.label;
+      box.appendChild(h3);
+
+      const tags = document.createElement('div');
+      tags.className = 'ext-tags';
+      for (let j = 0; j < fam.extensions.length; j++) {
+        const tag = document.createElement('span');
+        tag.className = 'ext-tag';
+        tag.textContent = '.' + fam.extensions[j];
+        tags.appendChild(tag);
+      }
+      box.appendChild(tags);
+      grid.appendChild(box);
+    }
+  }
+
+  /* -------------------------------------------------------------------------
+   * Pestañas y visibilidad del panel de opciones de Hojas de cálculo
+   * ---------------------------------------------------------------------- */
+  function initWorkspaceControls() {
+    const tabLocal = document.getElementById('tabLocalBtn');
+    const tabDrive = document.getElementById('tabDriveBtn');
+    const panelLocal = document.getElementById('panelLocal');
+    const panelDrive = document.getElementById('panelDrive');
+
+    function switchTab(tabName) {
+      state.currentTab = tabName;
+      const isLocal = tabName === 'local';
+      tabLocal.setAttribute('aria-selected', isLocal ? 'true' : 'false');
+      tabDrive.setAttribute('aria-selected', isLocal ? 'false' : 'true');
+      panelLocal.classList.toggle('hidden', !isLocal);
+      panelDrive.classList.toggle('hidden', isLocal);
+      updateSheetOptionsVisibility();
+    }
+
+    tabLocal.addEventListener('click', function () { switchTab('local'); });
+    tabDrive.addEventListener('click', function () { switchTab('drive'); });
+
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+
+    dropzone.addEventListener('click', function () { fileInput.click(); });
+    dropzone.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        fileInput.click();
+      }
+    });
+
+    fileInput.addEventListener('change', function (ev) {
+      if (ev.target.files && ev.target.files.length > 0) {
+        enqueueLocalFiles(ev.target.files);
+        fileInput.value = '';
+      }
+    });
+
+    dropzone.addEventListener('dragover', function (ev) {
+      ev.preventDefault();
+      dropzone.classList.add('drag-over');
+    });
+    dropzone.addEventListener('dragleave', function () {
+      dropzone.classList.remove('drag-over');
+    });
+    dropzone.addEventListener('drop', function (ev) {
+      ev.preventDefault();
+      dropzone.classList.remove('drag-over');
+      if (ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length > 0) {
+        enqueueLocalFiles(ev.dataTransfer.files);
+      }
+    });
+
+    const driveInput = document.getElementById('driveUrlInput');
+    const driveSheetChk = document.getElementById('driveIsSheetChk');
+    driveInput.addEventListener('input', function () {
+      if (driveInput.value.indexOf('/spreadsheets/') !== -1) {
+        driveSheetChk.checked = true;
+      }
+      updateSheetOptionsVisibility();
+    });
+    driveSheetChk.addEventListener('change', updateSheetOptionsVisibility);
+
+    document.getElementById('driveUrlForm').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      enqueueDriveUrlJob(driveInput.value.trim());
+    });
+
+    document.getElementById('downloadAllBtn').addEventListener('click', downloadAllCompleted);
+    document.getElementById('clearQueueBtn').addEventListener('click', clearAllJobs);
+  }
+
+  function updateSheetOptionsVisibility() {
+    const hasSheetInQueue = state.jobs.some(function (j) { return j.family === 'HOJAS'; });
+    const driveSheetChecked = state.currentTab === 'drive' && document.getElementById('driveIsSheetChk').checked;
+    document.getElementById('sheetOptionsPanel').classList.toggle('hidden', !hasSheetInQueue && !driveSheetChecked);
+  }
+
+  /* -------------------------------------------------------------------------
+   * Gestión de cola y ejecución de conversiones
+   * ---------------------------------------------------------------------- */
+  function findFormatInConfig(ext) {
+    if (!state.config || !state.config.enabledFormats) return null;
+    for (let i = 0; i < state.config.enabledFormats.length; i++) {
+      if (state.config.enabledFormats[i].ext === ext) {
+        return state.config.enabledFormats[i];
+      }
+    }
+    return null;
+  }
+
+  function enqueueLocalFiles(fileList) {
+    const cfg = state.config;
+    if (!cfg) return;
+
+    const files = Array.prototype.slice.call(fileList);
+    if (files.length > cfg.maxBatchFiles) {
+      showToast('Solo se procesarán los primeros ' + cfg.maxBatchFiles + ' archivos por lote.', true);
+    }
+    const batch = files.slice(0, cfg.maxBatchFiles);
+
+    for (let i = 0; i < batch.length; i++) {
+      const file = batch[i];
+      const ext = getExt(file.name);
+      const fmt = findFormatInConfig(ext);
+      const jobId = 'ui_' + Date.now() + '_' + Math.random().toString(16).slice(2, 7);
+
+      const job = {
+        id: jobId,
+        type: 'local',
+        file: file,
+        fileName: file.name,
+        ext: ext || '?',
+        family: fmt ? fmt.family : 'DEFAULT',
+        inputSizeBytes: file.size,
+        status: 'queued',
+        stageText: 'En cola...',
+        progressPct: 0,
+        indeterminate: false,
+        pdfUrl: '',
+        pdfFileName: '',
+        pdfSizeBytes: 0,
+        durationMs: 0,
+        errorText: ''
+      };
+
+      if (!fmt) {
+        job.status = 'error';
+        job.stageText = 'Formato no compatible o deshabilitado';
+        job.errorText = 'La extensión .' + job.ext + ' no está habilitada.';
+      } else if (file.size === 0) {
+        job.status = 'error';
+        job.stageText = 'Archivo vacío (0 B)';
+        job.errorText = 'El archivo no contiene datos.';
+      } else if (file.size > cfg.maxSizeBytes) {
+        job.status = 'error';
+        job.stageText = 'Supera el límite de ' + cfg.maxSizeMB + ' MB';
+        job.errorText = 'Peso: ' + formatBytes(file.size) + '.';
+      }
+
+      state.jobs.unshift(job);
+    }
+
+    renderQueue();
+    updateSheetOptionsVisibility();
+    processQueue();
+  }
+
+  function enqueueDriveUrlJob(url) {
+    if (!url) {
+      showToast('Introduce un enlace o ID de Google Drive válido.', true);
+      return;
+    }
+    const isLikelySheet = url.indexOf('/spreadsheets/') !== -1 || document.getElementById('driveIsSheetChk').checked;
+    const job = {
+      id: 'ui_' + Date.now() + '_' + Math.random().toString(16).slice(2, 7),
+      type: 'drive',
+      driveUrl: url,
+      fileName: url,
+      ext: isLikelySheet ? 'sheet' : 'drive',
+      family: isLikelySheet ? 'HOJAS' : 'DOCUMENTOS',
+      inputSizeBytes: 0,
+      status: 'queued',
+      stageText: 'En cola para lectura desde Drive...',
+      progressPct: 0,
+      indeterminate: true,
+      pdfUrl: '',
+      pdfFileName: '',
+      pdfSizeBytes: 0,
+      durationMs: 0,
+      errorText: ''
+    };
+    state.jobs.unshift(job);
+    document.getElementById('driveUrlInput').value = '';
+    renderQueue();
+    processQueue();
+  }
+
+  function processQueue() {
+    if (!state.config) return;
+    const threshold = state.config.directUploadMaxBytes;
+
+    for (let i = state.jobs.length - 1; i >= 0; i--) {
+      const job = state.jobs[i];
+      if (job.status !== 'queued') continue;
+
+      const isChunked = job.type === 'local' && job.inputSizeBytes > threshold;
+      if (isChunked) {
+        if (state.activeChunked) continue;
+        state.activeChunked = true;
+        runChunkedLocalJob(job).finally(function () {
+          state.activeChunked = false;
+          processQueue();
+        });
+      } else {
+        if (state.activeDirect >= DIRECT_CONCURRENCY) continue;
+        state.activeDirect++;
+        const runner = job.type === 'drive' ? runDriveUrlJob(job) : runDirectLocalJob(job);
+        runner.finally(function () {
+          state.activeDirect--;
+          processQueue();
+        });
+      }
+    }
+  }
+
+  function runDirectLocalJob(job) {
+    job.status = 'working';
+    job.indeterminate = true;
+    job.stageText = 'Leyendo archivo y enviando a Workspace...';
+    renderQueue();
+
+    return blobToBase64(job.file)
+      .then(function (b64) {
+        job.stageText = 'Convirtiendo documento a PDF...';
+        renderQueue();
+        return runServer('apiConvertLocalDirect', {
+          fileName: job.fileName,
+          base64Data: b64,
+          sheetOptions: job.family === 'HOJAS' ? readSheetOptions() : null
+        });
+      })
+      .then(function (res) {
+        return handleConversionTransfer(job, res);
+      })
+      .catch(function (err) {
+        markJobError(job, err);
+      });
+  }
+
+  function runChunkedLocalJob(job) {
+    job.status = 'working';
+    job.indeterminate = false;
+    job.progressPct = 4;
+    job.stageText = 'Iniciando subida fragmentada...';
+    renderQueue();
+
+    let uploadId = '';
+    const sheetOptions = job.family === 'HOJAS' ? readSheetOptions() : null;
+
+    return runServer('apiInitChunkedUpload', {
+      fileName: job.fileName,
+      totalBytes: job.inputSizeBytes,
+      sheetOptions: sheetOptions
+    })
+      .then(function (initRes) {
+        uploadId = initRes.uploadId;
+        const chunkSize = initRes.chunkSizeBytes || state.config.chunkSizeBytes;
+        const totalChunks = Math.ceil(job.inputSizeBytes / chunkSize);
+
+        let chain = Promise.resolve();
+        for (let idx = 0; idx < totalChunks; idx++) {
+          (function (chunkIdx) {
+            chain = chain.then(function () {
+              const start = chunkIdx * chunkSize;
+              const end = Math.min(job.inputSizeBytes, start + chunkSize);
+              const sliceBlob = job.file.slice(start, end);
+              return blobToBase64(sliceBlob).then(function (b64Chunk) {
+                return runServer('apiUploadChunk', {
+                  uploadId: uploadId,
+                  start: start,
+                  base64Chunk: b64Chunk
+                }).then(function () {
+                  job.progressPct = Math.round(((chunkIdx + 1) / totalChunks) * 78);
+                  job.stageText = 'Subiendo bloque ' + (chunkIdx + 1) + ' de ' + totalChunks + '...';
+                  renderQueue();
+                });
+              });
+            });
+          })(idx);
+        }
+        return chain;
+      })
+      .then(function () {
+        job.indeterminate = true;
+        job.progressPct = 85;
+        job.stageText = 'Generando PDF en Google Workspace...';
+        renderQueue();
+        return runServer('apiFinalizeChunkedUpload', { uploadId: uploadId });
+      })
+      .then(function (res) {
+        return handleConversionTransfer(job, res);
+      })
+      .catch(function (err) {
+        if (uploadId) {
+          runServer('apiAbortChunkedUpload', { uploadId: uploadId }).catch(function () {});
+        }
+        markJobError(job, err);
+      });
+  }
+
+  function runDriveUrlJob(job) {
+    job.status = 'working';
+    job.indeterminate = true;
+    job.stageText = 'Leyendo documento desde Google Drive...';
+    renderQueue();
+
+    const useSheetOpts = document.getElementById('driveIsSheetChk').checked || job.driveUrl.indexOf('/spreadsheets/') !== -1;
+    return runServer('apiConvertDriveUrl', {
+      url: job.driveUrl,
+      sheetOptions: useSheetOpts ? readSheetOptions() : null
+    })
+      .then(function (res) {
+        if (res.sourceName) job.fileName = res.sourceName;
+        if (res.ext) job.ext = res.ext;
+        if (res.family) job.family = res.family;
+        if (res.inputSizeBytes) job.inputSizeBytes = res.inputSizeBytes;
+        return handleConversionTransfer(job, res);
+      })
+      .catch(function (err) {
+        markJobError(job, err);
+      });
+  }
+
+  function handleConversionTransfer(job, res) {
+    if (res.transferMode === 'direct') {
+      const bytes = base64ToUint8Array(res.pdfBase64);
+      const pdfBlob = new Blob([bytes], { type: 'application/pdf' });
+      return finalizeJobSuccess(job, pdfBlob, res);
+    }
+
+    job.indeterminate = false;
+    job.progressPct = 88;
+    job.stageText = 'Descargando PDF grande (0%)...';
+    renderQueue();
+
+    const parts = [];
+    let chain = Promise.resolve();
+    for (let i = 0; i < res.totalChunks; i++) {
+      (function (chunkIdx) {
+        chain = chain.then(function () {
+          return runServer('apiFetchPdfChunk', {
+            downloadToken: res.downloadToken,
+            chunkIndex: chunkIdx
+          }).then(function (chunkData) {
+            parts.push(base64ToUint8Array(chunkData.chunkBase64));
+            const pct = 88 + Math.round(((chunkIdx + 1) / res.totalChunks) * 12);
+            job.progressPct = Math.min(99, pct);
+            job.stageText = 'Descargando bloque PDF ' + (chunkIdx + 1) + '/' + res.totalChunks + '...';
+            renderQueue();
+          });
+        });
+      })(i);
+    }
+
+    return chain
+      .then(function () {
+        const pdfBlob = new Blob(parts, { type: 'application/pdf' });
+        return runServer('apiCompletePdfDownload', { downloadToken: res.downloadToken })
+          .catch(function () {})
+          .then(function () {
+            return finalizeJobSuccess(job, pdfBlob, res);
+          });
+      })
+      .catch(function (err) {
+        runServer('apiCompletePdfDownload', { downloadToken: res.downloadToken }).catch(function () {});
+        throw err;
+      });
+  }
+
+  function finalizeJobSuccess(job, pdfBlob, res) {
+    if (job.pdfUrl) {
+      URL.revokeObjectURL(job.pdfUrl);
+    }
+    job.pdfUrl = URL.createObjectURL(pdfBlob);
+    job.pdfFileName = res.pdfFileName || 'documento.pdf';
+    job.pdfSizeBytes = res.pdfSizeBytes || pdfBlob.size;
+    job.durationMs = res.durationMs || 0;
+    job.status = 'done';
+    job.indeterminate = false;
+    job.progressPct = 100;
+    job.stageText = 'PDF listo';
+
+    decrementQuotaUi();
+    renderQueue();
+    updateSheetOptionsVisibility();
+  }
+
+  function markJobError(job, err) {
+    job.status = 'error';
+    job.indeterminate = false;
+    job.progressPct = 0;
+    job.errorText = err.message || 'Error en la conversión';
+    job.stageText = 'Error en la conversión';
+    renderQueue();
+    showToast(job.fileName + ': ' + job.errorText, true);
+  }
+
+  function retryJob(jobId) {
+    const job = findJob(jobId);
+    if (!job || job.status === 'working') return;
+    if (job.pdfUrl) {
+      URL.revokeObjectURL(job.pdfUrl);
+      job.pdfUrl = '';
+    }
+    job.status = 'queued';
+    job.errorText = '';
+    job.progressPct = 0;
+    job.stageText = 'En cola para reconversión...';
+    renderQueue();
+    processQueue();
+  }
+
+  function findJob(jobId) {
+    for (let i = 0; i < state.jobs.length; i++) {
+      if (state.jobs[i].id === jobId) return state.jobs[i];
+    }
+    return null;
+  }
+
+  function openPreview(jobId) {
+    const job = findJob(jobId);
+    if (!job || !job.pdfUrl) return;
+
+    document.getElementById('previewTitle').textContent = job.pdfFileName;
+    document.getElementById('previewFrame').src = job.pdfUrl;
+
+    const dlLink = document.getElementById('previewDownloadLink');
+    dlLink.href = job.pdfUrl;
+    dlLink.download = job.pdfFileName;
+
+    const tabLink = document.getElementById('previewNewTabLink');
+    tabLink.href = job.pdfUrl;
+
+    document.getElementById('previewDialog').showModal();
+  }
+
+  function downloadAllCompleted() {
+    const doneJobs = state.jobs.filter(function (j) { return j.status === 'done' && j.pdfUrl; });
+    for (let i = 0; i < doneJobs.length; i++) {
+      (function (job, delay) {
+        setTimeout(function () {
+          triggerBlobDownload(job.pdfUrl, job.pdfFileName);
+        }, delay);
+      })(doneJobs[i], i * 250);
+    }
+  }
+
+  function clearAllJobs() {
+    const active = state.jobs.some(function (j) { return j.status === 'working' || j.status === 'queued'; });
+    if (active) {
+      showToast('Espera a que terminen los trabajos en curso antes de limpiar.', true);
+      return;
+    }
+    for (let i = 0; i < state.jobs.length; i++) {
+      if (state.jobs[i].pdfUrl) {
+        URL.revokeObjectURL(state.jobs[i].pdfUrl);
+      }
+    }
+    state.jobs = [];
+    renderQueue();
+    updateSheetOptionsVisibility();
+  }
+
+  function renderQueue() {
+    const section = document.getElementById('queueSection');
+    const listEl = document.getElementById('queueList');
+    const titleEl = document.getElementById('queueTitle');
+    const downloadAllBtn = document.getElementById('downloadAllBtn');
+
+    if (state.jobs.length === 0) {
+      section.classList.add('hidden');
+      listEl.innerHTML = '';
+      return;
+    }
+
+    section.classList.remove('hidden');
+    const doneCount = state.jobs.filter(function (j) { return j.status === 'done'; }).length;
+    titleEl.textContent = 'Trabajos (' + doneCount + '/' + state.jobs.length + ' completados)';
+    downloadAllBtn.classList.toggle('hidden', doneCount < 2);
+
+    listEl.innerHTML = '';
+    for (let i = 0; i < state.jobs.length; i++) {
+      const job = state.jobs[i];
+      const card = document.createElement('article');
+      card.className = 'job-card';
+
+      const icon = document.createElement('div');
+      icon.className = 'job-icon fam-' + job.family;
+      icon.textContent = (job.ext || 'doc').slice(0, 5);
+      card.appendChild(icon);
+
+      const main = document.createElement('div');
+      main.className = 'job-main';
+
+      const nameRow = document.createElement('div');
+      nameRow.className = 'job-name-row';
+
+      const nameEl = document.createElement('span');
+      nameEl.className = 'job-name';
+      nameEl.textContent = job.status === 'done' ? job.pdfFileName : job.fileName;
+      nameEl.title = job.fileName;
+      nameRow.appendChild(nameEl);
+
+      const badge = document.createElement('span');
+      const badgeClass = job.status === 'done' ? 'badge-done'
+        : job.status === 'error' ? 'badge-error'
+        : job.status === 'working' ? 'badge-working'
+        : 'badge-queued';
+      badge.className = 'job-badge ' + badgeClass;
+      badge.textContent = job.status === 'done' ? 'Listo'
+        : job.status === 'error' ? 'Error'
+        : job.status === 'working' ? 'Procesando'
+        : 'En cola';
+      nameRow.appendChild(badge);
+      main.appendChild(nameRow);
+
+      const meta = document.createElement('div');
+      meta.className = 'job-meta';
+      if (job.status === 'done') {
+        const sizeDiff = job.inputSizeBytes > 0
+          ? formatBytes(job.inputSizeBytes) + ' → ' + formatBytes(job.pdfSizeBytes)
+          : formatBytes(job.pdfSizeBytes);
+        const durSec = job.durationMs ? ' · ' + (job.durationMs / 1000).toFixed(1) + ' s' : '';
+        meta.textContent = sizeDiff + durSec;
+      } else if (job.status === 'error') {
+        meta.textContent = job.errorText || job.stageText;
+      } else {
+        meta.textContent = job.stageText + (job.inputSizeBytes > 0 ? ' (' + formatBytes(job.inputSizeBytes) + ')' : '');
+      }
+      main.appendChild(meta);
+
+      if (job.status === 'working') {
+        const track = document.createElement('div');
+        track.className = 'progress-track';
+        const fill = document.createElement('div');
+        fill.className = 'progress-fill' + (job.indeterminate ? ' indeterminate' : '');
+        if (!job.indeterminate) {
+          fill.style.width = job.progressPct + '%';
+        }
+        track.appendChild(fill);
+        main.appendChild(track);
+      }
+
+      card.appendChild(main);
+
+      const btns = document.createElement('div');
+      btns.className = 'job-buttons';
+
+      if (job.status === 'done' && job.pdfUrl) {
+        const prevBtn = document.createElement('button');
+        prevBtn.type = 'button';
+        prevBtn.className = 'btn-sm';
+        prevBtn.textContent = 'Vista previa';
+        prevBtn.addEventListener('click', function () { openPreview(job.id); });
+        btns.appendChild(prevBtn);
+
+        const dlA = document.createElement('a');
+        dlA.className = 'btn-sm primary';
+        dlA.href = job.pdfUrl;
+        dlA.download = job.pdfFileName;
+        dlA.textContent = 'Descargar';
+        btns.appendChild(dlA);
+      }
+
+      if ((job.status === 'done' && job.family === 'HOJAS') || (job.status === 'error' && (job.file || job.driveUrl))) {
+        const retryBtn = document.createElement('button');
+        retryBtn.type = 'button';
+        retryBtn.className = 'btn-sm';
+        retryBtn.textContent = job.status === 'done' ? 'Reconvertir' : 'Reintentar';
+        retryBtn.addEventListener('click', function () { retryJob(job.id); });
+        btns.appendChild(retryBtn);
+      }
+
+      card.appendChild(btns);
+      listEl.appendChild(card);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    initThemeControls();
+    initDialogs();
+    initWorkspaceControls();
+    bootstrap();
+  });
+})();
+</script>

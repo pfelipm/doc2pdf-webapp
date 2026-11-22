@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <style>
+      :root {
+        --accent: <?= accentColor ?>;
+        --bg: #f1f5f9;
+        --surface: #ffffff;
+        --surface-alt: #f8fafc;
+        --text: #0f172a;
+        --muted: #64748b;
+        --border: #e2e8f0;
+        --ok: #16a34a;
+        --ok-bg: #dcfce7;
+        --err: #dc2626;
+        --err-bg: #fee2e2;
+        --warn: #d97706;
+        --warn-bg: #fef3c7;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background: linear-gradient(135deg, var(--accent) 0%, #0f2b5b 100%);
+        color: #fff;
+        padding: 13px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        box-shadow: 0 2px 10px rgba(15, 23, 42, 0.14);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .brand-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 9px;
+        background: rgba(255, 255, 255, 0.16);
+        display: grid;
+        place-items: center;
+      }
+      .brand h1 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .brand p {
+        margin: 1px 0 0;
+        font-size: 11.5px;
+        opacity: 0.86;
+      }
+      .controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .segmented {
+        display: inline-flex;
+        background: rgba(255, 255, 255, 0.14);
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        border-radius: 9px;
+        padding: 2px;
+      }
+      .seg-btn {
+        border: 0;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.88);
+        font-size: 12px;
+        font-weight: 600;
+        padding: 5px 10px;
+        border-radius: 7px;
+        cursor: pointer;
+        transition: background 0.15s ease, color 0.15s ease;
+      }
+      .seg-btn.active {
+        background: #ffffff;
+        color: #0f172a;
+      }
+      .icon-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        background: rgba(255, 255, 255, 0.14);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 6px 11px;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      .icon-btn:hover { background: rgba(255, 255, 255, 0.24); }
+
+      .main {
+        padding: 16px 20px 22px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .health-strip {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 9px 14px;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: var(--surface-alt);
+        border: 1px solid var(--border);
+        color: #334155;
+      }
+      .pill.ok { background: var(--ok-bg); border-color: #bbf7d0; color: #166534; }
+      .pill.warn { background: var(--warn-bg); border-color: #fde68a; color: #92400e; }
+      .pill.err { background: var(--err-bg); border-color: #fecaca; color: #991b1b; }
+      .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+      .mini-action {
+        border: 0;
+        background: #0f172a;
+        color: #fff;
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        margin-left: 2px;
+      }
+      .mini-action:disabled { opacity: 0.55; cursor: wait; }
+      .updated-at {
+        margin-left: auto;
+        font-size: 11.5px;
+        color: var(--muted);
+      }
+
+      .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 10px;
+      }
+      .kpi-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px 14px;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+      }
+      .kpi-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: var(--muted);
+        font-size: 11.5px;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      .kpi-val {
+        font-size: 23px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        color: var(--text);
+        line-height: 1.15;
+      }
+      .kpi-sub {
+        margin-top: 5px;
+        font-size: 11.5px;
+        color: var(--muted);
+      }
+      .kpi-bar {
+        margin-top: 7px;
+        height: 5px;
+        border-radius: 999px;
+        background: #e2e8f0;
+        overflow: hidden;
+      }
+      .kpi-bar > span {
+        display: block;
+        height: 100%;
+        background: var(--ok);
+        border-radius: 999px;
+      }
+
+      .charts-grid {
+        display: grid;
+        grid-template-columns: 1.65fr 1fr;
+        gap: 12px;
+      }
+      .insights-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px 16px;
+        position: relative;
+      }
+      .panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .panel-title {
+        margin: 0;
+        font-size: 13.5px;
+        font-weight: 700;
+        color: var(--text);
+      }
+      .legend-inline {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .legend-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 2px;
+        margin-right: 4px;
+      }
+
+      .chart-wrap {
+        position: relative;
+        width: 100%;
+      }
+      .svg-tooltip {
+        position: absolute;
+        pointer-events: none;
+        background: #0f172a;
+        color: #f8fafc;
+        padding: 6px 9px;
+        border-radius: 8px;
+        font-size: 11.5px;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.25);
+        opacity: 0;
+        transform: translate(-50%, -105%);
+        transition: opacity 0.1s ease;
+        white-space: nowrap;
+        z-index: 10;
+      }
+      .svg-tooltip.visible { opacity: 1; }
+
+      .donut-layout {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        min-height: 170px;
+      }
+      .donut-list {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .donut-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12.5px;
+      }
+      .donut-label {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-weight: 600;
+      }
+      .donut-swatch {
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+        flex-shrink: 0;
+      }
+
+      .origin-split {
+        margin-bottom: 12px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--border);
+      }
+      .origin-bar {
+        display: flex;
+        height: 10px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: #e2e8f0;
+        margin-top: 6px;
+      }
+      .origin-labels {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        color: #334155;
+        font-weight: 600;
+      }
+
+      .hbar-list {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+      .hbar-row {
+        display: grid;
+        grid-template-columns: 56px 1fr 56px;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+      }
+      .hbar-ext {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-weight: 700;
+        color: #1e293b;
+        text-transform: uppercase;
+      }
+      .hbar-track {
+        height: 8px;
+        border-radius: 999px;
+        background: #f1f5f9;
+        overflow: hidden;
+      }
+      .hbar-fill {
+        height: 100%;
+        border-radius: 999px;
+        background: var(--accent);
+      }
+      .hbar-num {
+        text-align: right;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .user-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .user-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 6px 8px;
+        border-radius: 8px;
+        background: var(--surface-alt);
+      }
+      .user-left {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        min-width: 0;
+      }
+      .avatar {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: color-mix(in srgb, var(--accent) 16%, #ffffff);
+        color: var(--accent);
+        font-size: 11px;
+        font-weight: 700;
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+      }
+      .user-email {
+        font-weight: 600;
+        font-size: 12.5px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .user-stats {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+      .rate-badge {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: var(--ok-bg);
+        color: #166534;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      th {
+        text-align: left;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: var(--muted);
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--border);
+        white-space: nowrap;
+      }
+      td {
+        padding: 8px 10px;
+        border-bottom: 1px solid #f1f5f9;
+        color: #1e293b;
+        vertical-align: middle;
+      }
+      tr:last-child td { border-bottom: 0; }
+      .file-cell {
+        max-width: 210px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 500;
+      }
+      .status-pill {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .status-OK { background: var(--ok-bg); color: #166534; }
+      .status-ERROR { background: var(--err-bg); color: #991b1b; }
+      .status-RECHAZADO { background: var(--warn-bg); color: #92400e; }
+
+      .dash-alert {
+        margin: 12px 20px 0;
+        padding: 10px 14px;
+        border-radius: 10px;
+        background: var(--err-bg);
+        border: 1px solid #fecaca;
+        color: #991b1b;
+        font-size: 12.5px;
+        font-weight: 600;
+        display: none;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .dash-alert.visible { display: flex; }
+
+      .empty-box {
+        text-align: center;
+        padding: 36px 20px;
+        color: var(--muted);
+      }
+      .loading-box {
+        display: grid;
+        gap: 12px;
+      }
+      .skel {
+        height: 92px;
+        border-radius: 12px;
+        background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.2s infinite;
+      }
+      @keyframes shimmer {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+      }
+      @media (max-width: 780px) {
+        .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .charts-grid, .insights-grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+          </svg>
+        </div>
+        <div>
+          <h1>Resumen y analítica · <?= appName ?></h1>
+          <p>Panel de control administrativo basado en la pestaña Auditoría · <?= version ?></p>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="segmented" role="group" aria-label="Periodo de análisis">
+          <button type="button" class="seg-btn" data-days="7" onclick="changePeriod(7)">7 días</button>
+          <button type="button" class="seg-btn active" data-days="30" onclick="changePeriod(30)">30 días</button>
+          <button type="button" class="seg-btn" data-days="90" onclick="changePeriod(90)">90 días</button>
+          <button type="button" class="seg-btn" data-days="0" onclick="changePeriod(0)">Todo</button>
+        </div>
+        <button type="button" class="icon-btn" onclick="loadAnalytics()" title="Actualizar datos">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          </svg>
+          Actualizar
+        </button>
+        <button type="button" class="icon-btn" onclick="google.script.host.close()">Cerrar</button>
+      </div>
+    </header>
+
+    <div id="dashAlertBanner" class="dash-alert" role="alert">
+      <span id="dashAlertText"></span>
+      <button type="button" class="mini-action" onclick="clearDashAlert()">Ocultar</button>
+    </div>
+
+    <main id="content" class="main">
+      <div class="loading-box">
+        <div class="skel"></div>
+        <div class="skel" style="height: 200px;"></div>
+        <div class="skel" style="height: 160px;"></div>
+      </div>
+    </main>
+
+    <script>
+      const DIALOG_TOKEN = '<?= dialogToken ?>';
+      let currentDays = 30;
+
+      function showDashAlert(msg) {
+        const banner = document.getElementById('dashAlertBanner');
+        const txt = document.getElementById('dashAlertText');
+        if (!banner || !txt) return;
+        txt.textContent = msg || 'Se ha producido un error.';
+        banner.classList.add('visible');
+      }
+
+      function clearDashAlert() {
+        const banner = document.getElementById('dashAlertBanner');
+        if (banner) banner.classList.remove('visible');
+      }
+
+      function escapeHtml(value) {
+        return String(value === null || value === undefined ? '' : value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function formatDuration(ms) {
+        if (!ms) return '0 ms';
+        if (ms < 1000) return ms + ' ms';
+        return (ms / 1000).toFixed(1) + ' s';
+      }
+
+      function formatKb(kb) {
+        if (!kb) return '0 KB';
+        if (kb >= 1024) return (kb / 1024).toFixed(2) + ' MB';
+        return kb.toFixed(1) + ' KB';
+      }
+
+      function changePeriod(days) {
+        currentDays = days;
+        const buttons = document.querySelectorAll('.seg-btn');
+        for (let i = 0; i < buttons.length; i++) {
+          buttons[i].classList.toggle('active', Number(buttons[i].dataset.days) === days);
+        }
+        loadAnalytics();
+      }
+
+      function loadAnalytics() {
+        clearDashAlert();
+        const container = document.getElementById('content');
+        container.innerHTML = '<div class="loading-box"><div class="skel"></div><div class="skel" style="height:200px"></div></div>';
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (!res || !res.success) {
+              renderError((res && res.error) || 'No se pudieron obtener los datos de Auditoría.');
+              return;
+            }
+            renderDashboard(res.data);
+          })
+          .withFailureHandler(function (err) {
+            renderError(err.message || 'Error al cargar analítica.');
+          })
+          .apiGetDashboardAnalytics(currentDays, DIALOG_TOKEN);
+      }
+
+      function renderError(msg) {
+        document.getElementById('content').innerHTML =
+          '<div class="panel empty-box"><h3>Error cargando el resumen</h3><p>' + escapeHtml(msg) + '</p></div>';
+      }
+
+      function triggerInstallFromDash(btn) {
+        clearDashAlert();
+        btn.disabled = true;
+        btn.textContent = 'Instalando...';
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (res && res.success) {
+              loadAnalytics();
+            } else {
+              btn.disabled = false;
+              btn.textContent = 'Instalar';
+              showDashAlert((res && res.error) || 'No se pudo instalar el trigger diario.');
+            }
+          })
+          .withFailureHandler(function (e) {
+            btn.disabled = false;
+            btn.textContent = 'Instalar';
+            showDashAlert((e && e.message) || 'Error al instalar el trigger diario.');
+          })
+          .apiInstallTriggerFromDialog(DIALOG_TOKEN);
+      }
+
+      function purgeTempFromDash(btn) {
+        clearDashAlert();
+        btn.disabled = true;
+        btn.textContent = 'Purgando...';
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (res && res.success) {
+              loadAnalytics();
+            } else {
+              btn.disabled = false;
+              btn.textContent = 'Purgar';
+              showDashAlert((res && res.error) || 'No se pudieron purgar los archivos temporales.');
+            }
+          })
+          .withFailureHandler(function (e) {
+            btn.disabled = false;
+            btn.textContent = 'Purgar';
+            showDashAlert((e && e.message) || 'Error al purgar temporales.');
+          })
+          .apiPurgeTempFilesFromDialog(DIALOG_TOKEN);
+      }
+
+      function renderBarChartSvg(series) {
+        if (!series || series.length === 0) {
+          return '<div class="empty-box" style="padding:28px">Sin actividad registrada en el periodo seleccionado.</div>';
+        }
+        const W = 560;
+        const H = 195;
+        const padL = 32;
+        const padR = 10;
+        const padT = 14;
+        const padB = 28;
+        const plotW = W - padL - padR;
+        const plotH = H - padT - padB;
+
+        let maxTotal = 1;
+        for (let i = 0; i < series.length; i++) {
+          if (series[i].total > maxTotal) maxTotal = series[i].total;
+        }
+        const yTicks = [0, Math.ceil(maxTotal / 2), maxTotal];
+        let gridHtml = '';
+        for (let t = 0; t < yTicks.length; t++) {
+          const val = yTicks[t];
+          const y = padT + plotH - (val / maxTotal) * plotH;
+          gridHtml += '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y.toFixed(1) + '" stroke="#e2e8f0" stroke-dasharray="3 3"/>';
+          gridHtml += '<text x="' + (padL - 6) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end" font-size="10" fill="#64748b">' + val + '</text>';
+        }
+
+        const step = plotW / series.length;
+        const barW = Math.max(4, Math.min(26, step * 0.66));
+        const labelEvery = series.length > 16 ? Math.ceil(series.length / 8) : (series.length > 9 ? 2 : 1);
+
+        let barsHtml = '';
+        for (let i = 0; i < series.length; i++) {
+          const d = series[i];
+          const cx = padL + i * step + step / 2;
+          const x = cx - barW / 2;
+          let yCursor = padT + plotH;
+
+          const segments = [
+            { count: d.ok, color: '#1a73e8' },
+            { count: d.rejected, color: '#f59e0b' },
+            { count: d.error, color: '#ef4444' }
+          ];
+          for (let s = 0; s < segments.length; s++) {
+            const seg = segments[s];
+            if (seg.count <= 0) continue;
+            const h = (seg.count / maxTotal) * plotH;
+            yCursor -= h;
+            barsHtml += '<rect x="' + x.toFixed(1) + '" y="' + yCursor.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + Math.max(1.5, h).toFixed(1) + '" rx="2" fill="' + seg.color + '"/>';
+          }
+
+          barsHtml += '<rect class="bar-hit" x="' + (padL + i * step).toFixed(1) + '" y="' + padT + '" width="' + step.toFixed(1) + '" height="' + plotH + '" fill="transparent" data-idx="' + i + '"/>';
+
+          if (i % labelEvery === 0 || i === series.length - 1) {
+            barsHtml += '<text x="' + cx.toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" fill="#64748b">' + escapeHtml(d.label) + '</text>';
+          }
+        }
+
+        return '<div class="chart-wrap">' +
+          '<svg id="dailyChartSvg" viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="195" role="img" aria-label="Actividad diaria">' +
+          gridHtml + barsHtml +
+          '</svg>' +
+          '<div id="barTooltip" class="svg-tooltip"></div>' +
+          '</div>';
+      }
+
+      function renderDonutSvg(byFamily, totalCount) {
+        if (!byFamily || byFamily.length === 0) {
+          return '<div class="empty-box" style="padding:28px">Sin datos de formatos todavía.</div>';
+        }
+        const r = 46;
+        const c = 2 * Math.PI * r;
+        let offset = 0;
+        let arcs = '';
+
+        for (let i = 0; i < byFamily.length; i++) {
+          const fam = byFamily[i];
+          const dash = (fam.percent / 100) * c;
+          arcs += '<circle cx="64" cy="64" r="' + r + '" fill="none" stroke="' + escapeHtml(fam.color) + '" stroke-width="18" stroke-dasharray="' + dash.toFixed(2) + ' ' + (c - dash).toFixed(2) + '" stroke-dashoffset="' + (-offset).toFixed(2) + '" transform="rotate(-90 64 64)"/>';
+          offset += dash;
+        }
+
+        let legend = '';
+        for (let i = 0; i < byFamily.length; i++) {
+          const fam = byFamily[i];
+          legend += '<div class="donut-item">' +
+            '<span class="donut-label"><span class="donut-swatch" style="background:' + escapeHtml(fam.color) + '"></span>' + escapeHtml(fam.label) + '</span>' +
+            '<span style="color:#475569;font-variant-numeric:tabular-nums;"><b>' + fam.count + '</b> (' + fam.percent + '%)</span>' +
+            '</div>';
+        }
+
+        return '<div class="donut-layout">' +
+          '<svg width="128" height="128" viewBox="0 0 128 128" style="flex-shrink:0" aria-label="Distribución por familia">' +
+          '<circle cx="64" cy="64" r="' + r + '" fill="none" stroke="#f1f5f9" stroke-width="18"/>' +
+          arcs +
+          '<text x="64" y="61" text-anchor="middle" font-size="20" font-weight="800" fill="#0f172a">' + totalCount + '</text>' +
+          '<text x="64" y="77" text-anchor="middle" font-size="10.5" fill="#64748b">trabajos</text>' +
+          '</svg>' +
+          '<div class="donut-list">' + legend + '</div>' +
+          '</div>';
+      }
+
+      function renderDashboard(data) {
+        const k = data.kpis;
+        const h = data.health || {};
+        const originTotal = (data.byOrigin.local || 0) + (data.byOrigin.drive || 0);
+        const localPct = originTotal > 0 ? Math.round((data.byOrigin.local / originTotal) * 100) : 0;
+        const drivePct = originTotal > 0 ? 100 - localPct : 0;
+
+        let html = '';
+
+        // Barra de estado del sistema
+        html += '<section class="health-strip" aria-label="Estado del servicio">' +
+          '<span class="pill ' + (h.serviceActive ? 'ok' : 'warn') + '"><span class="dot"></span>' + (h.serviceActive ? 'Servicio activo' : 'En mantenimiento') + '</span>' +
+          '<span class="pill ' + (h.hasTrigger ? 'ok' : 'warn') + '"><span class="dot"></span>' + (h.hasTrigger ? 'Trigger diario activo' : 'Sin trigger diario') +
+            (!h.hasTrigger ? ' <button type="button" class="mini-action" onclick="triggerInstallFromDash(this)">Instalar</button>' : '') +
+          '</span>' +
+          '<span class="pill ' + ((h.tempFilesCount || 0) > 0 ? 'warn' : 'ok') + '"><span class="dot"></span>Temporales en Drive: ' + (h.tempFilesCount || 0) +
+            ((h.tempFilesCount || 0) > 0 ? ' <button type="button" class="mini-action" onclick="purgeTempFromDash(this)">Purgar</button>' : '') +
+          '</span>' +
+          '<span class="pill">Límites: ' + (h.maxSizeMB || 20) + ' MB · ' + (h.dailyLimit ? h.dailyLimit + '/día' : 'Sin cuota') + ' · Auditoría: ' + escapeHtml(h.auditNameMode || 'COMPLETO') + '</span>' +
+          '<span class="updated-at">Actualizado: ' + escapeHtml(data.generatedAt) + '</span>' +
+          '</section>';
+
+        // 5 KPIs
+        html += '<section class="kpi-grid">' +
+          '<div class="kpi-card"><div class="kpi-top"><span>Total trabajos</span></div><div class="kpi-val">' + k.total + '</div><div class="kpi-sub">' + k.ok + ' OK · ' + k.error + ' err · ' + k.rejected + ' rech.</div></div>' +
+          '<div class="kpi-card"><div class="kpi-top"><span>Tasa de éxito</span></div><div class="kpi-val">' + k.successRate + '%</div><div class="kpi-bar"><span style="width:' + Math.min(100, k.successRate) + '%"></span></div></div>' +
+          '<div class="kpi-card"><div class="kpi-top"><span>Conversiones hoy</span></div><div class="kpi-val">' + k.todayCount + '</div><div class="kpi-sub">Trabajos OK en la fecha actual</div></div>' +
+          '<div class="kpi-card"><div class="kpi-top"><span>Usuarios únicos</span></div><div class="kpi-val">' + k.uniqueUsers + '</div><div class="kpi-sub">Cuentas activas en el periodo</div></div>' +
+          '<div class="kpi-card"><div class="kpi-top"><span>Tiempo medio</span></div><div class="kpi-val">' + formatDuration(k.avgDurationMs) + '</div><div class="kpi-sub">p95: ' + formatDuration(k.p95DurationMs) + ' · ' + k.totalPdfMB + ' MB PDF</div></div>' +
+          '</section>';
+
+        if ((h.totalAuditRows || 0) === 0) {
+          html += '<section class="panel empty-box">' +
+            '<h2 style="margin:0 0 6px;font-size:16px;color:#0f172a;">Aún no hay conversiones registradas</h2>' +
+            '<p style="margin:0;">Cuando el profesorado o personal utilice la WebApp para convertir documentos a PDF, este panel mostrará series diarias, desglose por formatos, usuarios activos y latencias.</p>' +
+            '</section>';
+          document.getElementById('content').innerHTML = html;
+          return;
+        }
+
+        // Gráficos principales
+        html += '<section class="charts-grid">' +
+          '<div class="panel">' +
+            '<div class="panel-head">' +
+              '<h2 class="panel-title">Actividad diaria</h2>' +
+              '<div class="legend-inline">' +
+                '<span><span class="legend-dot" style="background:#1a73e8"></span>OK</span>' +
+                '<span><span class="legend-dot" style="background:#f59e0b"></span>Rechazado</span>' +
+                '<span><span class="legend-dot" style="background:#ef4444"></span>Error</span>' +
+              '</div>' +
+            '</div>' +
+            renderBarChartSvg(data.dailySeries) +
+          '</div>' +
+          '<div class="panel">' +
+            '<div class="panel-head"><h2 class="panel-title">Familias de documentos</h2></div>' +
+            renderDonutSvg(data.byFamily, k.total) +
+          '</div>' +
+          '</section>';
+
+        // Paneles secundarios: Extensiones/Origen + Top Usuarios
+        const maxExtCount = data.byExtension.length > 0 ? data.byExtension[0].count : 1;
+        let extHtml = '';
+        for (let i = 0; i < data.byExtension.length; i++) {
+          const item = data.byExtension[i];
+          const widthPct = Math.max(6, Math.round((item.count / maxExtCount) * 100));
+          extHtml += '<div class="hbar-row">' +
+            '<span class="hbar-ext">.' + escapeHtml(item.ext) + '</span>' +
+            '<div class="hbar-track"><div class="hbar-fill" style="width:' + widthPct + '%"></div></div>' +
+            '<span class="hbar-num">' + item.count + '</span>' +
+            '</div>';
+        }
+
+        let usersHtml = '';
+        for (let i = 0; i < data.topUsers.length; i++) {
+          const u = data.topUsers[i];
+          const initials = (u.email.slice(0, 2) || 'US').toUpperCase();
+          usersHtml += '<div class="user-row">' +
+            '<div class="user-left"><span class="avatar">' + escapeHtml(initials) + '</span><span class="user-email" title="' + escapeHtml(u.email) + '">' + escapeHtml(u.email) + '</span></div>' +
+            '<div class="user-stats"><b>' + u.total + '</b><span class="rate-badge">' + u.successRate + '% OK</span></div>' +
+            '</div>';
+        }
+
+        html += '<section class="insights-grid">' +
+          '<div class="panel">' +
+            '<div class="panel-head"><h2 class="panel-title">Origen y formatos principales</h2></div>' +
+            '<div class="origin-split">' +
+              '<div class="origin-labels"><span>Archivo local: ' + data.byOrigin.local + ' (' + localPct + '%)</span><span>Enlace Drive: ' + data.byOrigin.drive + ' (' + drivePct + '%)</span></div>' +
+              '<div class="origin-bar"><div style="width:' + localPct + '%;background:#1a73e8"></div><div style="width:' + drivePct + '%;background:#0ea5e9"></div></div>' +
+            '</div>' +
+            '<div class="hbar-list">' + (extHtml || '<span style="color:#64748b">Sin extensiones registradas</span>') + '</div>' +
+          '</div>' +
+          '<div class="panel">' +
+            '<div class="panel-head"><h2 class="panel-title">Usuarios más activos</h2></div>' +
+            '<div class="user-list">' + (usersHtml || '<span style="color:#64748b">Sin datos de usuarios</span>') + '</div>' +
+          '</div>' +
+          '</section>';
+
+        // Tabla de últimos trabajos
+        let rowsHtml = '';
+        for (let i = 0; i < data.recentJobs.length; i++) {
+          const job = data.recentJobs[i];
+          const safeStatus = ['OK', 'ERROR', 'RECHAZADO'].indexOf(job.status) !== -1 ? job.status : 'ERROR';
+          rowsHtml += '<tr>' +
+            '<td style="white-space:nowrap">' + escapeHtml(job.timestamp) + '</td>' +
+            '<td class="file-cell" title="' + escapeHtml(job.user) + '">' + escapeHtml(job.user) + '</td>' +
+            '<td>' + escapeHtml(job.origin) + '</td>' +
+            '<td class="file-cell" title="' + escapeHtml(job.file) + '">' + escapeHtml(job.file) + '</td>' +
+            '<td><code>' + escapeHtml(job.ext ? '.' + job.ext : '—') + '</code></td>' +
+            '<td style="white-space:nowrap">' + formatKb(job.inputKB) + ' → ' + formatKb(job.pdfKB) + '</td>' +
+            '<td style="white-space:nowrap">' + formatDuration(job.durationMs) + '</td>' +
+            '<td title="' + escapeHtml(job.detail) + '"><span class="status-pill status-' + safeStatus + '">' + escapeHtml(safeStatus) + '</span></td>' +
+            '</tr>';
+        }
+
+        html += '<section class="panel">' +
+          '<div class="panel-head"><h2 class="panel-title">Actividad reciente (últimos 20 trabajos)</h2></div>' +
+          '<div class="table-wrap">' +
+            '<table>' +
+              '<thead><tr><th>Fecha</th><th>Usuario</th><th>Origen</th><th>Archivo</th><th>Ext.</th><th>Entrada → PDF</th><th>Tiempo</th><th>Estado</th></tr></thead>' +
+              '<tbody>' + (rowsHtml || '<tr><td colspan="8" style="text-align:center;color:#64748b">Sin trabajos recientes en este periodo.</td></tr>') + '</tbody>' +
+            '</table>' +
+          '</div>' +
+          '</section>';
+
+        document.getElementById('content').innerHTML = html;
+        attachBarTooltips(data.dailySeries);
+      }
+
+      function attachBarTooltips(series) {
+        const svg = document.getElementById('dailyChartSvg');
+        const tip = document.getElementById('barTooltip');
+        if (!svg || !tip || !series) return;
+
+        const hits = svg.querySelectorAll('.bar-hit');
+        for (let i = 0; i < hits.length; i++) {
+          hits[i].addEventListener('mouseenter', function (e) {
+            const idx = Number(e.target.getAttribute('data-idx'));
+            const item = series[idx];
+            if (!item) return;
+            tip.textContent = item.label + ': ' + item.ok + ' OK · ' + item.rejected + ' rech. · ' + item.error + ' err.';
+            tip.classList.add('visible');
+          });
+          hits[i].addEventListener('mousemove', function (e) {
+            const rect = svg.parentElement.getBoundingClientRect();
+            tip.style.left = (e.clientX - rect.left) + 'px';
+            tip.style.top = (e.clientY - rect.top) + 'px';
+          });
+          hits[i].addEventListener('mouseleave', function () {
+            tip.classList.remove('visible');
+          });
+        }
+      }
+
+      loadAnalytics();
+    </script>
+  </body>
+</html>

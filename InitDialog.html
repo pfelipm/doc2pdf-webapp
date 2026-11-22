@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <style>
+      :root {
+        --accent: <?= accentColor ?>;
+        --bg: #f8fafc;
+        --surface: #ffffff;
+        --text: #0f172a;
+        --muted: #475569;
+        --border: #e2e8f0;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .hdr {
+        background: var(--accent);
+        color: #fff;
+        padding: 15px 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 16.5px;
+        font-weight: 600;
+      }
+      .body {
+        padding: 22px 22px 18px;
+        text-align: center;
+      }
+      .warn-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: #fef3c7;
+        color: #d97706;
+        margin-bottom: 12px;
+      }
+      .warn-text {
+        font-size: 13.5px;
+        line-height: 1.55;
+        color: #334155;
+        margin: 0 0 14px;
+      }
+      .opt-box {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px 12px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        font-size: 13px;
+        color: var(--text);
+        margin-bottom: 18px;
+        cursor: pointer;
+      }
+      .opt-box input {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--accent);
+      }
+      .actions {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+      }
+      .btn {
+        border: 0;
+        border-radius: 8px;
+        padding: 9px 18px;
+        font-size: 13.5px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .btn-cancel {
+        background: #ffffff;
+        color: #334155;
+        border: 1px solid #cbd5e1;
+      }
+      .btn-danger {
+        background: #dc2626;
+        color: #ffffff;
+      }
+      .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .status-msg {
+        margin-top: 12px;
+        min-height: 20px;
+        font-size: 12.5px;
+        font-weight: 600;
+      }
+      .status-ok { color: #15803d; }
+      .status-err { color: #b91c1c; }
+    </style>
+  </head>
+  <body>
+    <div class="hdr">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><polyline points="3 3 3 8 8 8"/>
+      </svg>
+      <span>Reinicializar <?= APP_NAME ?></span>
+    </div>
+
+    <div class="body">
+      <div class="warn-badge" aria-hidden="true">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </div>
+
+      <p class="warn-text">
+        La pestaña <b>Ajustes</b> ya existe en esta hoja de cálculo.<br>
+        Si continúas, se restablecerán los valores de configuración por defecto (el historial de <b>Auditoría</b> se conservará intacto salvo que marques la casilla inferior).
+      </p>
+
+      <label class="opt-box">
+        <input type="checkbox" id="resetAuditChk">
+        <span>Vaciar también la pestaña <b>Auditoría</b></span>
+      </label>
+
+      <div class="actions">
+        <button type="button" class="btn btn-cancel" id="cancelBtn" onclick="google.script.host.close()">Cancelar</button>
+        <button type="button" class="btn btn-danger" id="confirmBtn" onclick="confirmInit()">Reinicializar ajustes</button>
+      </div>
+
+      <div id="statusMsg" class="status-msg" role="status"></div>
+    </div>
+
+    <script>
+      const DIALOG_TOKEN = '<?= dialogToken ?>';
+
+      function confirmInit() {
+        const btn = document.getElementById('confirmBtn');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const statusEl = document.getElementById('statusMsg');
+        const resetAudit = document.getElementById('resetAuditChk').checked;
+
+        btn.disabled = true;
+        cancelBtn.disabled = true;
+        btn.textContent = 'Aplicando...';
+        statusEl.className = 'status-msg';
+        statusEl.textContent = 'Restaurando estructura y validaciones...';
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (res && res.success) {
+              statusEl.className = 'status-msg status-ok';
+              statusEl.textContent = 'Estructura restablecida correctamente.';
+              setTimeout(function () { google.script.host.close(); }, 900);
+            } else {
+              btn.disabled = false;
+              cancelBtn.disabled = false;
+              btn.textContent = 'Reinicializar ajustes';
+              statusEl.className = 'status-msg status-err';
+              statusEl.textContent = (res && res.error) || 'Error desconocido';
+            }
+          })
+          .withFailureHandler(function (err) {
+            btn.disabled = false;
+            cancelBtn.disabled = false;
+            btn.textContent = 'Reinicializar ajustes';
+            statusEl.className = 'status-msg status-err';
+            statusEl.textContent = err.message || 'Error al comunicarse con Apps Script';
+          })
+          .apiExecuteSetupSheet({ resetAudit: resetAudit }, DIALOG_TOKEN);
+      }
+    </script>
+  </body>
+</html>
