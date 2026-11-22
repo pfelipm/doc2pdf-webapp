@@ -186,7 +186,7 @@ const SUPPORTED_FORMATS = {
     ext: 'xlsm',
     label: 'Excel con macros (.xlsm)',
     family: 'HOJAS',
-    sourceMime: 'application/vnd.ms-excel.sheet.macroEnabled.12',
+    sourceMime: 'application/vnd.ms-excel.sheet.macroenabled.12',
     targetGoogleMime: 'application/vnd.google-apps.spreadsheet',
     exportType: 'spreadsheets'
   },

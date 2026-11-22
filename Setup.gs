@@ -282,7 +282,7 @@ function showDeployDialog() {
   template.accentColor = cfg.COLOR_ACENTO;
   template.editorUrl = 'https://script.google.com/home/projects/' + ScriptApp.getScriptId() + '/edit';
   template.dialogToken = createAdminDialogToken_(adminEmail);
-  const html = template.evaluate().setWidth(600).setHeight(590);
+  const html = template.evaluate().setWidth(620).setHeight(675);
   SpreadsheetApp.getUi().showModalDialog(html, ' ');
 }
 
@@ -315,7 +315,7 @@ function showAboutDialog() {
   template.APP_AUTHOR_HANDLE = APP_AUTHOR_HANDLE;
   template.APP_AUTHOR_URL = APP_AUTHOR_URL;
   template.accentColor = cfg.COLOR_ACENTO;
-  const html = template.evaluate().setWidth(490).setHeight(560);
+  const html = template.evaluate().setWidth(490).setHeight(600);
   SpreadsheetApp.getUi().showModalDialog(html, ' ');
 }
 
@@ -361,6 +361,10 @@ function menuCheckDriveImportFormats() {
   assertSpreadsheetAdmin_('menuCheckDriveImportFormats');
   const about = Drive.About.get({ fields: 'importFormats, maxImportSizes' });
   const importFormats = (about && about.importFormats) || {};
+  const normalizedImportFormats = {};
+  Object.keys(importFormats).forEach(function (mimeKey) {
+    normalizedImportFormats[String(mimeKey).toLowerCase()] = importFormats[mimeKey];
+  });
   const cfg = getConfig_();
   const enabled = getEnabledFormats_(cfg);
   const lines = [];
@@ -368,7 +372,7 @@ function menuCheckDriveImportFormats() {
 
   for (let i = 0; i < enabled.length; i++) {
     const fmt = enabled[i];
-    const targets = importFormats[fmt.sourceMime] || [];
+    const targets = normalizedImportFormats[String(fmt.sourceMime || '').toLowerCase()] || [];
     const ok = targets.indexOf(fmt.targetGoogleMime) !== -1;
     if (ok) verified++;
     lines.push((ok ? '✅ ' : '⚠️ ') + '.' + fmt.ext + ' (' + fmt.sourceMime + ')');
