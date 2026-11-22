@@ -87,17 +87,26 @@ function ensureAuditSheet_(ss) {
  * Aplica estilo a la cabecera de la pestaña Auditoría.
  */
 function styleAuditHeader_(sheet) {
-  const headerRange = sheet.getRange(1, 1, 1, AUDIT_HEADERS.length);
+  const auditCols = AUDIT_HEADERS.length;
+  if (sheet.getMaxRows() < 2) {
+    sheet.insertRowsAfter(sheet.getMaxRows(), 2 - sheet.getMaxRows());
+  }
+  if (sheet.getMaxColumns() < auditCols) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), auditCols - sheet.getMaxColumns());
+  }
+
+  const headerRange = sheet.getRange(1, 1, 1, auditCols);
   headerRange
     .setFontWeight('bold')
     .setBackground('#0f2b5b')
     .setFontColor('#ffffff')
     .setVerticalAlignment('middle')
-    .setHorizontalAlignment('left');
-  sheet.setRowHeight(1, 30);
+    .setHorizontalAlignment('left')
+    .setWrap(true);
+  sheet.setRowHeight(1, 34);
   sheet.setFrozenRows(1);
 
-  const widths = [148, 170, 210, 105, 240, 82, 125, 130, 120, 105, 98, 260, 180];
+  const widths = [155, 185, 220, 108, 240, 118, 136, 196, 168, 148, 110, 260, 200];
   for (let i = 0; i < widths.length; i++) {
     sheet.setColumnWidth(i + 1, widths[i]);
   }

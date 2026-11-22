@@ -5,7 +5,31 @@
  */
 
 /**
- * Obtiene o crea la carpeta temporal dedicada en el Google Drive de la cuenta ejecutora.
+ * Obtiene el ID de la carpeta padre donde reside la hoja de cálculo de control,
+ * o cadena vacía si no se puede determinar.
+ * @return {string}
+ */
+function getSpreadsheetParentFolderId_() {
+  try {
+    const ss = getSpreadsheet_();
+    const ssId = ss && typeof ss.getId === 'function' ? ss.getId() : '';
+    if (!ssId) return '';
+    const meta = Drive.Files.get(ssId, {
+      fields: 'parents',
+      supportsAllDrives: true
+    });
+    if (meta && Array.isArray(meta.parents) && meta.parents.length > 0) {
+      return String(meta.parents[0] || '').trim();
+    }
+  } catch (e) {
+    console.warn('No se pudo obtener la carpeta padre de la hoja de control:', e.message);
+  }
+  return '';
+}
+
+/**
+ * Obtiene o crea la carpeta temporal dedicada dentro de la carpeta donde reside la hoja
+ * de control (con respaldo a la raíz de Mi unidad si no se puede determinar padre).
  * @param {Object=} config Configuración actual opcional.
  * @return {string} ID de la carpeta temporal.
  */
@@ -33,6 +57,9 @@ function getOrCreateTempFolder_(config) {
         if (propFolderId !== meta.id) {
           props.setProperty(PROP_TEMP_FOLDER_ID, meta.id);
         }
+        if (!cfg.CARPETA_TEMP_ID) {
+          setConfigValue_('CARPETA_TEMP_ID', meta.id);
+        }
         return meta.id;
       }
     } catch (e) {
@@ -40,12 +67,17 @@ function getOrCreateTempFolder_(config) {
     }
   }
 
-  // Buscar por nombre en raíz antes de crear una nueva para evitar duplicados
+  const sheetParentId = getSpreadsheetParentFolderId_();
+
+  // Buscar por nombre en la carpeta de la hoja (o raíz como respaldo) para evitar duplicados
   try {
+    const parentClause = sheetParentId ? "'" + sheetParentId + "' in parents" : "'root' in parents";
     const existing = Drive.Files.list({
-      q: "name = '" + TEMP_FOLDER_DEFAULT_NAME + "' and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+      q: parentClause + " and name = '" + TEMP_FOLDER_DEFAULT_NAME + "' and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
       fields: 'files(id, name)',
-      pageSize: 5
+      pageSize: 5,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true
     });
     if (existing && existing.files && existing.files.length > 0) {
       const foundId = existing.files[0].id;
@@ -59,14 +91,19 @@ function getOrCreateTempFolder_(config) {
     console.warn('No se pudo buscar carpeta temporal existente:', e.message);
   }
 
+  const folderResource = {
+    name: TEMP_FOLDER_DEFAULT_NAME,
+    mimeType: 'application/vnd.google-apps.folder',
+    description: 'Carpeta temporal automática de Doc2PDF. Sus archivos se purgan automáticamente.'
+  };
+  if (sheetParentId) {
+    folderResource.parents = [sheetParentId];
+  }
+
   const created = Drive.Files.create(
-    {
-      name: TEMP_FOLDER_DEFAULT_NAME,
-      mimeType: 'application/vnd.google-apps.folder',
-      description: 'Carpeta temporal automática de Doc2PDF. Sus archivos se purgan automáticamente.'
-    },
+    folderResource,
     null,
-    { fields: 'id' }
+    { fields: 'id', supportsAllDrives: true }
   );
 
   props.setProperty(PROP_TEMP_FOLDER_ID, created.id);
@@ -144,6 +181,8 @@ function purgeOrphanTempFiles_(maxAgeMinutes) {
   const ageLimit = typeof maxAgeMinutes === 'number' && maxAgeMinutes >= 0 ? maxAgeMinutes : 30;
   const cfg = getConfig_();
   const folderId = getOrCreateTempFolder_(cfg);
+  const ss = getSpreadsheet_();
+  const ssId = ss && typeof ss.getId === 'function' ? ss.getId() : '';
   const cutoffMs = Date.now() - ageLimit * 60 * 1000;
 
   let scanned = 0;
@@ -154,7 +193,7 @@ function purgeOrphanTempFiles_(maxAgeMinutes) {
   do {
     const res = Drive.Files.list({
       q: "'" + folderId + "' in parents and trashed = false",
-      fields: 'nextPageToken, files(id, name, createdTime, modifiedTime)',
+      fields: 'nextPageToken, files(id, name, mimeType, createdTime, modifiedTime)',
       pageSize: 100,
       pageToken: pageToken,
       supportsAllDrives: true,
@@ -163,8 +202,11 @@ function purgeOrphanTempFiles_(maxAgeMinutes) {
 
     const files = res && res.files ? res.files : [];
     for (let i = 0; i < files.length; i++) {
-      scanned++;
       const f = files[i];
+      if (!f || !f.id || (ssId && f.id === ssId) || f.mimeType === 'application/vnd.google-apps.folder') {
+        continue;
+      }
+      scanned++;
       const refIso = f.modifiedTime || f.createdTime;
       const refMs = refIso ? Date.parse(refIso) : 0;
       if (ageLimit === 0 || !refMs || refMs <= cutoffMs) {

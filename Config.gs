@@ -42,6 +42,32 @@ const FAMILY_META = {
 };
 
 /**
+ * Límites min/max compartidos entre la validación de la hoja Ajustes y la normalización del servidor.
+ */
+const CONFIG_NUMERIC_LIMITS = {
+  LIMITE_DIARIO_USUARIO: {
+    min: 0,
+    max: 10000,
+    help: 'Introduce un número entre 0 (sin límite) y 10000.'
+  },
+  TAMANO_MAX_MB: {
+    min: 1,
+    max: 45,
+    help: 'Introduce un valor entre 1 y 45 MB (límite técnico seguro bajo el tope de 50 MB de Apps Script / UrlFetchApp).'
+  },
+  MAX_ARCHIVOS_LOTE: {
+    min: 1,
+    max: 20,
+    help: 'Introduce un valor entre 1 y 20 archivos por lote.'
+  },
+  RETENCION_AUDITORIA_DIAS: {
+    min: 0,
+    max: 3650,
+    help: 'Introduce un valor entre 0 (indefinido) y 3650 días (10 años).'
+  }
+};
+
+/**
  * Definición ordenada de los ajustes disponibles en la pestaña "Ajustes".
  * Formato: [clave, valorPorDefecto, descripcion, tipoValidacion]
  */
@@ -58,11 +84,14 @@ const DEFAULT_CONFIG_DEFS = [
   ['LIMITE_DIARIO_USUARIO', 30, 'Máximo de conversiones al día por usuario (0 = sin límite)', 'number'],
   ['TAMANO_MAX_MB', 20, 'Tamaño máximo permitido por archivo en MB (rango seguro: 1 a 45)', 'number'],
   ['MAX_ARCHIVOS_LOTE', 5, 'Máximo de archivos simultáneos en cola por lote (1 a 20)', 'number'],
-  ['FAMILIAS_HABILITADAS', 'DOCUMENTOS,HOJAS,PRESENTACIONES,TEXTO', 'Familias permitidas: DOCUMENTOS, HOJAS, PRESENTACIONES, TEXTO', 'text'],
+  ['PERMITIR_DOCUMENTOS', 'SI', 'Habilita conversión de documentos de texto (.docx, .doc, .dot, .dotx, .odt, .rtf)', 'checkbox'],
+  ['PERMITIR_HOJAS', 'SI', 'Habilita conversión de hojas de cálculo (.xlsx, .xls, .xlt, .xltx, .xlsm, .ods, .csv, .tsv)', 'checkbox'],
+  ['PERMITIR_PRESENTACIONES', 'SI', 'Habilita conversión de presentaciones (.pptx, .ppt, .odp)', 'checkbox'],
+  ['PERMITIR_TEXTO', 'SI', 'Habilita conversión de texto plano y marcado (.txt, .md, .html, .htm)', 'checkbox'],
   ['PERMITIR_ENLACE_DRIVE', 'SI', 'Permite convertir documentos pegando una URL compartida de Google Drive', 'checkbox'],
   ['REGISTRAR_NOMBRE_ARCHIVO', 'COMPLETO', 'Nivel de detalle del nombre en Auditoría: COMPLETO, ANONIMIZADO o NINGUNO', 'audit_mode'],
   ['RETENCION_AUDITORIA_DIAS', 180, 'Días de conservación en Auditoría antes de purga automática (0 = indefinido)', 'number'],
-  ['CARPETA_TEMP_ID', '', 'ID de la carpeta temporal en Drive (se crea automáticamente si se deja vacío)', 'text']
+  ['CARPETA_TEMP_ID', '', 'ID de la carpeta temporal en Drive (se crea automáticamente como subcarpeta _Doc2PDF_Temp junto a esta hoja si se deja vacío)', 'text']
 ];
 
 /**
@@ -360,11 +389,16 @@ function normalizeConfigObject_(rawInput) {
   const defaults = buildDefaultRawConfig_();
   const raw = Object.assign({}, defaults, rawInput || {});
 
-  const rawFamilies = parseListSetting_(raw.FAMILIAS_HABILITADAS, true);
-  const validFamilies = rawFamilies.filter(function (f) {
-    return FAMILY_ORDER.indexOf(f) !== -1;
-  });
-  const familiesList = validFamilies.length > 0 ? validFamilies : FAMILY_ORDER.slice();
+  const allowDocumentos = parseBoolean_(raw.PERMITIR_DOCUMENTOS, true);
+  const allowHojas = parseBoolean_(raw.PERMITIR_HOJAS, true);
+  const allowPresentaciones = parseBoolean_(raw.PERMITIR_PRESENTACIONES, true);
+  const allowTexto = parseBoolean_(raw.PERMITIR_TEXTO, true);
+
+  const familiesList = [];
+  if (allowDocumentos) familiesList.push('DOCUMENTOS');
+  if (allowHojas) familiesList.push('HOJAS');
+  if (allowPresentaciones) familiesList.push('PRESENTACIONES');
+  if (allowTexto) familiesList.push('TEXTO');
 
   const rawAuditMode = String(raw.REGISTRAR_NOMBRE_ARCHIVO || AUDIT_MODE_COMPLETO).trim().toUpperCase();
   const auditNameMode = [AUDIT_MODE_COMPLETO, AUDIT_MODE_ANONIMIZADO, AUDIT_MODE_NINGUNO].indexOf(rawAuditMode) !== -1
@@ -381,13 +415,37 @@ function normalizeConfigObject_(rawInput) {
     DOMINIOS_PERMITIDOS: parseListSetting_(raw.DOMINIOS_PERMITIDOS, false),
     LISTA_BLANCA_USUARIOS: parseListSetting_(raw.LISTA_BLANCA_USUARIOS, false),
     LISTA_NEGRA_USUARIOS: parseListSetting_(raw.LISTA_NEGRA_USUARIOS, false),
-    LIMITE_DIARIO_USUARIO: parseIntClamped_(raw.LIMITE_DIARIO_USUARIO, 30, 0, 10000),
-    TAMANO_MAX_MB: parseIntClamped_(raw.TAMANO_MAX_MB, 20, 1, 45),
-    MAX_ARCHIVOS_LOTE: parseIntClamped_(raw.MAX_ARCHIVOS_LOTE, 5, 1, 20),
+    LIMITE_DIARIO_USUARIO: parseIntClamped_(
+      raw.LIMITE_DIARIO_USUARIO,
+      30,
+      CONFIG_NUMERIC_LIMITS.LIMITE_DIARIO_USUARIO.min,
+      CONFIG_NUMERIC_LIMITS.LIMITE_DIARIO_USUARIO.max
+    ),
+    TAMANO_MAX_MB: parseIntClamped_(
+      raw.TAMANO_MAX_MB,
+      20,
+      CONFIG_NUMERIC_LIMITS.TAMANO_MAX_MB.min,
+      CONFIG_NUMERIC_LIMITS.TAMANO_MAX_MB.max
+    ),
+    MAX_ARCHIVOS_LOTE: parseIntClamped_(
+      raw.MAX_ARCHIVOS_LOTE,
+      5,
+      CONFIG_NUMERIC_LIMITS.MAX_ARCHIVOS_LOTE.min,
+      CONFIG_NUMERIC_LIMITS.MAX_ARCHIVOS_LOTE.max
+    ),
+    PERMITIR_DOCUMENTOS: allowDocumentos,
+    PERMITIR_HOJAS: allowHojas,
+    PERMITIR_PRESENTACIONES: allowPresentaciones,
+    PERMITIR_TEXTO: allowTexto,
     FAMILIAS_HABILITADAS: familiesList,
     PERMITIR_ENLACE_DRIVE: parseBoolean_(raw.PERMITIR_ENLACE_DRIVE, true),
     REGISTRAR_NOMBRE_ARCHIVO: auditNameMode,
-    RETENCION_AUDITORIA_DIAS: parseIntClamped_(raw.RETENCION_AUDITORIA_DIAS, 180, 0, 3650),
+    RETENCION_AUDITORIA_DIAS: parseIntClamped_(
+      raw.RETENCION_AUDITORIA_DIAS,
+      180,
+      CONFIG_NUMERIC_LIMITS.RETENCION_AUDITORIA_DIAS.min,
+      CONFIG_NUMERIC_LIMITS.RETENCION_AUDITORIA_DIAS.max
+    ),
     CARPETA_TEMP_ID: String(raw.CARPETA_TEMP_ID || '').trim()
   };
 }

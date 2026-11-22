@@ -25,12 +25,14 @@ Microservicio web ligero e interno para **Google Workspace** desarrollado ínteg
   - Descarga fragmentada automática cuando el PDF resultante supera `7 MB`.
 - **Privacidad, control y cumplimiento RGPD:**
   - Modelo **Opción A**: ejecutado como administrador / cuenta funcional del centro (`executeAs: "USER_DEPLOYING"`) y restringido al dominio Workspace (`access: "DOMAIN"`). La Google Sheet de control permanece **100 % privada**.
+  - Carpeta temporal dedicada `_Doc2PDF_Temp` creada automáticamente dentro de la carpeta donde reside la Google Sheet (con salvaguarda anti-borrado en purga sobre la propia hoja y subcarpetas).
   - Borrado **permanente** inmediato de temporales (`Drive.Files.remove`) en bloque `finally`, más trigger diario de purga para huérfanos.
   - Protección contra *Formula Injection* en `Auditoría` y política configurable de registro de nombres (`COMPLETO`, `ANONIMIZADO`, `NINGUNO`).
 - **Panel administrativo en Google Sheets:**
-  - Solo 2 pestañas en la hoja: `Ajustes` y `Auditoría`.
+  - Solo 2 pestañas optimizadas: `Ajustes` (con casillas `SI`/`NO`, desplegables, validaciones numéricas estrictas, ajuste multilínea y autoanchura) y `Auditoría` (filtros activos en todas las columnas y cabecera calibrada).
+  - Recorte automático de filas y columnas vacías sobrantes al inicializar o reparar (avisando explícitamente del restablecimiento de `Ajustes` y respetando filas/columnas con datos en `Auditoría`).
   - Diálogo modal HTML rico **Resumen y analítica** (KPIs, actividad diaria SVG, donut por familias, top extensiones, usuarios activos y últimos trabajos).
-  - Modal **Acerca de Doc2PDF** de atribución desde el menú personalizado.
+  - Modal **Acerca de Doc2PDF** de atribución con banner gráfico WebP embebido en Base64 desde el menú personalizado.
 
 ---
 
@@ -47,33 +49,33 @@ Siguiendo un diseño *Zero Trust* respecto al navegador y mínimo privilegio en 
 
 ---
 
-## Estructura del repositorio (`src/`)
+## Estructura del repositorio
 
-La raíz del repositorio Git y de `clasp` vive dentro de `src/`, dejando libre el directorio padre (`doc2pdf-webapp/`) para recursos auxiliares locales o de difusión fuera del control de versiones:
+La raíz del repositorio coincide con el directorio raíz de `clasp` (`rootDir: "."`):
 
 ```text
-src/
+.
 ├── assets/
 │   └── banner.jpg           # Banner del repositorio (1376×688, proporción 2:1)
 ├── .clasp.json.example      # Plantilla de configuración para clasp (rootDir: ".")
-├── .claspignore
+├── .claspignore             # Excluye documentación, assets y metadatos al hacer clasp push
 ├── .gitignore
 ├── LICENSE                  # GNU GPL v3.0
 ├── README.md
 ├── appsscript.json          # Manifiesto V8, Drive API v3, scopes mínimos y acceso DOMAIN
-├── Config.gs                # Ajustes cacheados, catálogo de formatos y helpers
-├── Setup.gs                 # Menú personalizado, inicialización de pestañas y diálogos
+├── Config.gs                # Ajustes cacheados, catálogo de formatos, límites y helpers
+├── Setup.gs                 # Menú personalizado, inicialización/recorte de pestañas y diálogos
 ├── Auth.gs                  # Identidad Workspace, listas de acceso y cuota diaria
-├── Audit.gs                 # Auditoría concurrente (LockService), retención y analítica
-├── Cleanup.gs               # Carpeta temporal y purga permanente inmediata/programada
+├── Audit.gs                 # Auditoría concurrente (LockService), filtros, retención y analítica
+├── Cleanup.gs               # Carpeta temporal _Doc2PDF_Temp junto a la hoja y purga segura
 ├── Converter.gs             # Motor de conversión (directo, chunked y enlace Drive)
 ├── WebApp.gs                # doGet() y endpoints RPC para google.script.run
 ├── Index.html               # Estructura de la WebApp (tema claro/oscuro + <dialog>)
 ├── Styles.html              # CSS adaptativo con soporte light-dark() y fallbacks
 ├── ClientScript.html        # Cola, drag & drop, chunking y vista previa PDF
 ├── DashboardDialog.html     # Diálogo modal de Resumen y analítica (SVG nativo)
-├── AboutDialog.html         # Diálogo modal "Acerca de Doc2PDF"
-├── InitDialog.html          # Confirmación de reinicialización de pestañas
+├── AboutDialog.html         # Diálogo modal "Acerca de Doc2PDF" con banner Base64 WebP
+├── InitDialog.html          # Confirmación de reinicialización con aviso de borrado/recorte
 └── DeployDialog.html        # Asistente paso a paso para guardar la URL de WebApp
 ```
 
@@ -82,13 +84,12 @@ src/
 ## Instalación y despliegue con `clasp`
 
 1. **Crear la hoja de cálculo de control**
-   - Desde la cuenta administradora o **cuenta funcional del centro** (recomendado, p. ej. `servicios-edtech@tucentro.edu`), crea una Google Sheet nueva (por ejemplo, `Doc2PDF · Control`).
+   - Desde la cuenta administradora o **cuenta funcional del centro** (recomendado, p. ej. `servicios-edtech@tucentro.edu`), crea una Google Sheet nueva dentro de una **carpeta privada** del administrador (por ejemplo, `Doc2PDF · Control`).
    - Abre **Extensiones → Apps Script**, ve a **Configuración del proyecto** (icono de engranaje) y copia el **ID del script**.
 
-2. **Vincular y subir el código con `clasp`**
-   Sitúate dentro de la carpeta del repositorio (`src/`) y ejecuta:
+2. **Clonar, vincular y subir el código con `clasp`**
+   En la raíz del repositorio clonado ejecuta:
    ```bash
-   cd src
    cp .clasp.json.example .clasp.json
    # Edita .clasp.json y sustituye REEMPLAZA_CON_EL_SCRIPT_ID_DE_TU_HOJA por tu scriptId
    clasp login
@@ -111,27 +112,34 @@ src/
 
 ## Ajustes configurables (`Ajustes`)
 
-| Clave | Valor inicial | Descripción |
-| :--- | :--- | :--- |
-| `NOMBRE_APP` | `Doc2PDF` | Título principal de la WebApp |
-| `SUBTITULO_CENTRO` | `Conversor interno de documentos a PDF` | Subtítulo en cabecera |
-| `COLOR_ACENTO` | `#1a73e8` | Color de acento hexadecimal (`#RRGGBB`) |
-| `LOGO_URL` | *(vacío)* | URL HTTPS opcional del logotipo |
-| `SERVICIO_ACTIVO` | `SI` | Activa (`SI`) o pausa en mantenimiento (`NO`) |
-| `MENSAJE_MANTENIMIENTO` | *(mensaje estándar)* | Aviso mostrado cuando `SERVICIO_ACTIVO = NO` |
-| `DOMINIOS_PERMITIDOS` | *(vacío)* | Dominios Workspace separados por comas (vacío = dominio del desplegador) |
-| `LISTA_BLANCA_USUARIOS` | *(vacío)* | Correos permitidos (vacío = todo el dominio) |
-| `LISTA_NEGRA_USUARIOS` | *(vacío)* | Correos bloqueados |
-| `LIMITE_DIARIO_USUARIO` | `30` | Conversiones máximas por usuario al día (`0` = sin límite) |
-| `TAMANO_MAX_MB` | `20` | Peso máximo por archivo (`1` a `45` MB) |
-| `MAX_ARCHIVOS_LOTE` | `5` | Máximo de archivos simultáneos por lote (`1` a `20`) |
-| `FAMILIAS_HABILITADAS` | `DOCUMENTOS,HOJAS,PRESENTACIONES,TEXTO` | Familias de formatos habilitadas |
-| `PERMITIR_ENLACE_DRIVE` | `SI` | Habilita la pestaña de conversión por enlace/ID de Drive |
-| `REGISTRAR_NOMBRE_ARCHIVO` | `COMPLETO` | `COMPLETO`, `ANONIMIZADO` (hash SHA-256) o `NINGUNO` |
-| `RETENCION_AUDITORIA_DIAS` | `180` | Días de retención automática (`0` = indefinido) |
-| `CARPETA_TEMP_ID` | *(automático)* | ID de `_Doc2PDF_Temp` en Drive |
+La pestaña `Ajustes` incorpora validaciones estrictas de datos sobre sus 20 parámetros:
 
-> **Nota sobre caché:** los ajustes se cachean durante **5 minutos**. Tras editar la pestaña `Ajustes`, puedes aplicar los cambios al instante ejecutando **`📄 Doc2PDF → 🛠️ Mantenimiento → 🔄 Limpiar caché de ajustes`**.
+| Clave | Valor inicial | Tipo / Validación | Descripción |
+| :--- | :--- | :--- | :--- |
+| `NOMBRE_APP` | `Doc2PDF` | Texto (máx. 60 car.) | Título principal de la WebApp y pestaña |
+| `SUBTITULO_CENTRO` | `Conversor interno de documentos a PDF` | Texto (máx. 120 car.) | Subtítulo institucional en cabecera |
+| `COLOR_ACENTO` | `#1a73e8` | Color Hex (`#RRGGBB`) | Color principal de botones, iconos y realces |
+| `LOGO_URL` | *(vacío)* | URL `https://` | URL HTTPS opcional del logotipo |
+| `SERVICIO_ACTIVO` | `SI` | Casilla (`SI` / `NO`) | Activa (`SI`) o pausa en mantenimiento (`NO`) |
+| `MENSAJE_MANTENIMIENTO` | *(mensaje estándar)* | Texto (máx. 300 car.) | Aviso mostrado cuando `SERVICIO_ACTIVO = NO` |
+| `DOMINIOS_PERMITIDOS` | *(vacío)* | Lista por comas | Dominios Workspace permitidos (vacío = dominio del desplegador) |
+| `LISTA_BLANCA_USUARIOS` | *(vacío)* | Lista por comas | Correos autorizados (vacío = todo el dominio) |
+| `LISTA_NEGRA_USUARIOS` | *(vacío)* | Lista por comas | Correos bloqueados |
+| `LIMITE_DIARIO_USUARIO` | `30` | Numérico (`0 – 10 000`) | Conversiones máximas por usuario al día (`0` = sin límite; sugerido) |
+| `TAMANO_MAX_MB` | `20` | Numérico (`1 – 45`) | Peso máximo por archivo en MB *(límite técnico seguro bajo tope de 50 MB de Apps Script)* |
+| `MAX_ARCHIVOS_LOTE` | `5` | Numérico (`1 – 20`) | Máximo de archivos simultáneos por lote *(sugerido)* |
+| `PERMITIR_DOCUMENTOS` | `SI` | Casilla (`SI` / `NO`) | Habilita documentos de texto (`.docx`, `.doc`, `.dot`, `.dotx`, `.odt`, `.rtf`) |
+| `PERMITIR_HOJAS` | `SI` | Casilla (`SI` / `NO`) | Habilita hojas de cálculo (`.xlsx`, `.xls`, `.xlt`, `.xltx`, `.xlsm`, `.ods`, `.csv`, `.tsv`) |
+| `PERMITIR_PRESENTACIONES` | `SI` | Casilla (`SI` / `NO`) | Habilita presentaciones (`.pptx`, `.ppt`, `.odp`) |
+| `PERMITIR_TEXTO` | `SI` | Casilla (`SI` / `NO`) | Habilita texto plano y marcado (`.txt`, `.md`, `.html`, `.htm`) |
+| `PERMITIR_ENLACE_DRIVE` | `SI` | Casilla (`SI` / `NO`) | Habilita la pestaña de conversión por enlace/ID de Drive |
+| `REGISTRAR_NOMBRE_ARCHIVO` | `COMPLETO` | Desplegable (`COMPLETO` / `ANONIMIZADO` / `NINGUNO`) | Nivel de privacidad del nombre registrado en `Auditoría` |
+| `RETENCION_AUDITORIA_DIAS` | `180` | Numérico (`0 – 3 650`) | Días de retención automática (`0` = indefinido; sugerido) |
+| `CARPETA_TEMP_ID` | *(automático)* | Texto (ID Drive) | ID de la subcarpeta `_Doc2PDF_Temp` creada junto a esta hoja |
+
+> **Notas importantes:**
+> - **Caché:** los ajustes se cachean durante **5 minutos**. Tras editar la pestaña `Ajustes`, puedes aplicar los cambios al instante ejecutando **`📄 Doc2PDF → 🛠️ Mantenimiento → 🔄 Limpiar caché de ajustes`**.
+> - **Carpeta temporal y privacidad:** `_Doc2PDF_Temp` se crea automáticamente como subcarpeta en la misma carpeta donde reside la Google Sheet (heredando sus permisos). Se recomienda alojar la hoja de control en una **carpeta privada** del administrador o cuenta funcional.
 
 ---
 

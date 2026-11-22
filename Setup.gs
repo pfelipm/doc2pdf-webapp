@@ -49,7 +49,7 @@ function setupSheet() {
   template.APP_NAME = APP_NAME;
   template.accentColor = getConfig_().COLOR_ACENTO;
   template.dialogToken = createAdminDialogToken_(adminEmail);
-  const html = template.evaluate().setWidth(460).setHeight(390);
+  const html = template.evaluate().setWidth(510).setHeight(490);
   SpreadsheetApp.getUi().showModalDialog(html, ' ');
 }
 
@@ -70,7 +70,6 @@ function executeSetupSheet_(options) {
   if (!configSheet) {
     configSheet = ss.insertSheet(SHEET_CONFIG_NAME, 0);
   }
-  configSheet.clear();
 
   const rows = [['Ajuste', 'Valor', 'Descripción']];
   for (let i = 0; i < DEFAULT_CONFIG_DEFS.length; i++) {
@@ -80,7 +79,19 @@ function executeSetupSheet_(options) {
       DEFAULT_CONFIG_DEFS[i][2]
     ]);
   }
-  configSheet.getRange(1, 1, rows.length, 3).setValues(rows);
+  const usedRows = rows.length;
+  const usedCols = 3;
+
+  if (configSheet.getMaxRows() < usedRows) {
+    configSheet.insertRowsAfter(configSheet.getMaxRows(), usedRows - configSheet.getMaxRows());
+  }
+  if (configSheet.getMaxColumns() < usedCols) {
+    configSheet.insertColumnsAfter(configSheet.getMaxColumns(), usedCols - configSheet.getMaxColumns());
+  }
+
+  configSheet.clear();
+  configSheet.getRange(1, 1, configSheet.getMaxRows(), configSheet.getMaxColumns()).clearDataValidations();
+  configSheet.getRange(1, 1, usedRows, usedCols).setValues(rows);
 
   // Estilo de cabecera y filas cebra suaves
   configSheet.getRange('A1:C1')
@@ -88,53 +99,116 @@ function executeSetupSheet_(options) {
     .setBackground('#0f2b5b')
     .setFontColor('#ffffff')
     .setVerticalAlignment('middle');
-  configSheet.setRowHeight(1, 32);
   configSheet.setFrozenRows(1);
 
-  for (let r = 2; r <= rows.length; r++) {
+  for (let r = 2; r <= usedRows; r++) {
     const bg = r % 2 === 0 ? '#ffffff' : '#f8fafc';
     configSheet.getRange(r, 1, 1, 3).setBackground(bg).setVerticalAlignment('middle');
     configSheet.getRange(r, 1).setFontWeight('bold').setFontColor('#1e293b');
     configSheet.getRange(r, 3).setFontColor('#475569');
-    configSheet.setRowHeight(r, 26);
 
-    const valType = DEFAULT_CONFIG_DEFS[r - 2][3];
+    const def = DEFAULT_CONFIG_DEFS[r - 2];
+    const key = def[0];
+    const valType = def[3];
     const valueCell = configSheet.getRange(r, 2);
+
     if (valType === 'checkbox') {
       valueCell.setDataValidation(
-        SpreadsheetApp.newDataValidation().requireCheckbox('SI', 'NO').build()
+        SpreadsheetApp.newDataValidation()
+          .requireCheckbox('SI', 'NO')
+          .setAllowInvalid(false)
+          .build()
       );
     } else if (valType === 'audit_mode') {
       valueCell.setDataValidation(
         SpreadsheetApp.newDataValidation()
           .requireValueInList([AUDIT_MODE_COMPLETO, AUDIT_MODE_ANONIMIZADO, AUDIT_MODE_NINGUNO], true)
+          .setAllowInvalid(false)
+          .setHelpText('Selecciona COMPLETO, ANONIMIZADO o NINGUNO.')
           .build()
       );
+    } else if (valType === 'number') {
+      const numSpec = CONFIG_NUMERIC_LIMITS[key];
+      if (numSpec) {
+        valueCell.setDataValidation(
+          SpreadsheetApp.newDataValidation()
+            .requireNumberBetween(numSpec.min, numSpec.max)
+            .setAllowInvalid(false)
+            .setHelpText(numSpec.help)
+            .build()
+        );
+      }
     }
   }
 
   configSheet.setColumnWidth(1, 235);
-  configSheet.setColumnWidth(2, 330);
-  configSheet.setColumnWidth(3, 520);
-  configSheet.getRange(1, 1, rows.length, 3).setBorder(
+  configSheet.setColumnWidth(2, 340);
+  configSheet.getRange(2, 2, usedRows - 1, 1).setWrap(true);
+  configSheet.getRange(2, 3, usedRows - 1, 1).setWrap(false);
+  SpreadsheetApp.flush();
+  configSheet.autoResizeColumn(3);
+  configSheet.setColumnWidth(3, configSheet.getColumnWidth(3) + 24);
+
+  SpreadsheetApp.flush();
+  configSheet.setRowHeight(1, 32);
+  configSheet.autoResizeRows(2, usedRows - 1);
+  for (let r = 2; r <= usedRows; r++) {
+    if (configSheet.getRowHeight(r) < 28) {
+      configSheet.setRowHeight(r, 28);
+    }
+  }
+
+  configSheet.getRange(1, 1, usedRows, usedCols).setBorder(
     true, true, true, true, true, true, '#e2e8f0', SpreadsheetApp.BorderStyle.SOLID
   );
+
+  // Recortar filas y columnas sobrantes fuera de la tabla de Ajustes
+  if (configSheet.getMaxRows() > usedRows) {
+    configSheet.deleteRows(usedRows + 1, configSheet.getMaxRows() - usedRows);
+  }
+  if (configSheet.getMaxColumns() > usedCols) {
+    configSheet.deleteColumns(usedCols + 1, configSheet.getMaxColumns() - usedCols);
+  }
 
   // 2. Pestaña Auditoría
   let auditSheet = ss.getSheetByName(SHEET_AUDIT_NAME);
   if (!auditSheet) {
     auditSheet = ss.insertSheet(SHEET_AUDIT_NAME, 1);
   }
+
+  const auditCols = AUDIT_HEADERS.length;
+  const existingFilter = auditSheet.getFilter();
+  if (existingFilter) {
+    existingFilter.remove();
+  }
+
   if (opts.resetAudit === true) {
     auditSheet.clear();
   }
-  if (auditSheet.getLastRow() === 0) {
-    auditSheet.getRange(1, 1, 1, AUDIT_HEADERS.length).setValues([AUDIT_HEADERS]);
-    styleAuditHeader_(auditSheet);
-    if (!auditSheet.getFilter()) {
-      auditSheet.getRange(1, 1, 1, AUDIT_HEADERS.length).createFilter();
-    }
+
+  if (auditSheet.getMaxRows() < 2) {
+    auditSheet.insertRowsAfter(auditSheet.getMaxRows(), 2 - auditSheet.getMaxRows());
   }
+  if (auditSheet.getMaxColumns() < auditCols) {
+    auditSheet.insertColumnsAfter(auditSheet.getMaxColumns(), auditCols - auditSheet.getMaxColumns());
+  }
+
+  if (auditSheet.getLastRow() === 0) {
+    auditSheet.getRange(1, 1, 1, auditCols).setValues([AUDIT_HEADERS]);
+  }
+
+  styleAuditHeader_(auditSheet);
+
+  const targetAuditRows = Math.max(2, auditSheet.getLastRow());
+  const targetAuditCols = Math.max(auditCols, auditSheet.getLastColumn());
+  if (auditSheet.getMaxRows() > targetAuditRows) {
+    auditSheet.deleteRows(targetAuditRows + 1, auditSheet.getMaxRows() - targetAuditRows);
+  }
+  if (auditSheet.getMaxColumns() > targetAuditCols) {
+    auditSheet.deleteColumns(targetAuditCols + 1, auditSheet.getMaxColumns() - targetAuditCols);
+  }
+
+  auditSheet.getRange(1, 1, targetAuditRows, auditCols).createFilter();
 
   // Eliminar la pestaña genérica "Hoja 1" / "Sheet1" solo si está totalmente vacía
   const defaultSheetNames = ['Hoja 1', 'Sheet1'];
@@ -145,6 +219,7 @@ function executeSetupSheet_(options) {
     }
   }
 
+  PropertiesService.getScriptProperties().deleteProperty(PROP_TEMP_FOLDER_ID);
   clearConfigCache_();
   const cfg = getConfig_(true);
   getOrCreateTempFolder_(cfg);
