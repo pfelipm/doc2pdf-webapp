@@ -128,7 +128,7 @@ La pestaña `Ajustes` incorpora validaciones estrictas de datos sobre sus 21 par
 | `LISTA_NEGRA_USUARIOS` | *(vacío)* | Lista por comas | Correos bloqueados |
 | `LIMITE_DIARIO_USUARIO` | `30` | Numérico (`0 – 10 000`) | Conversiones máximas por usuario al día (`0` = sin límite; sugerido) |
 | `TAMANO_MAX_MB` | `20` | Numérico (`1 – 45`) | Peso máximo por archivo en MB *(límite técnico seguro bajo tope de 50 MB de Apps Script)* |
-| `MAX_ARCHIVOS_LOTE` | `5` | Numérico (`1 – 20`) | Máximo de archivos simultáneos por lote *(sugerido)* |
+| `MAX_ARCHIVOS_LOTE` | `5` | Numérico (`1 – 20`) | Máximo de archivos admitidos por lote al arrastrar o seleccionar *(sugerido)* |
 | `PERMITIR_DOCUMENTOS` | `SI` | Casilla (`SI` / `NO`) | Habilita documentos de texto (`.docx`, `.doc`, `.dot`, `.dotx`, `.odt`, `.rtf`) |
 | `PERMITIR_HOJAS` | `SI` | Casilla (`SI` / `NO`) | Habilita hojas de cálculo (`.xlsx`, `.xls`, `.xlt`, `.xltx`, `.xlsm`, `.ods`, `.csv`, `.tsv`) |
 | `PERMITIR_PRESENTACIONES` | `SI` | Casilla (`SI` / `NO`) | Habilita presentaciones (`.pptx`, `.ppt`, `.odp`) |
@@ -141,6 +141,8 @@ La pestaña `Ajustes` incorpora validaciones estrictas de datos sobre sus 21 par
 
 > **Notas importantes:**
 > - **Caché:** los ajustes se cachean durante **5 minutos**. Tras editar la pestaña `Ajustes`, puedes aplicar los cambios al instante ejecutando **`📄 Doc2PDF → 🛠️ Mantenimiento → 🔄 Limpiar caché de ajustes`**.
+> - **Equipo administrador y modo mantenimiento:** el rol de administración se determina por la cuenta desplegadora del script más el **propietario y los editores explícitos** de la Google Sheet de control (cacheado 60 s). Quienes pertenezcan a este grupo mantienen acceso de pruebas con un banner de aviso cuando `SERVICIO_ACTIVO = NO` (mientras el resto de usuarios queda bloqueado) y quedan exentos de `LISTA_BLANCA_USUARIOS` y `DOMINIOS_PERMITIDOS`.
+> - **Concurrencia de conversión:** `MAX_ARCHIVOS_LOTE` limita cuántos archivos entran en cola en cada envío; la WebApp los procesa de **2 en 2** en paralelo (`DIRECT_CONCURRENCY = 2`) para subidas directas (`<= 6 MB`) y enlaces de Drive, y de **1 en 1** en subidas fragmentadas (`> 6 MB`), protegiendo así el cupo compartido de 30 ejecuciones simultáneas de Apps Script.
 > - **Carpeta temporal y privacidad:** `_Doc2PDF_Temp` se crea automáticamente como subcarpeta en la misma carpeta donde reside la Google Sheet (heredando sus permisos). Se recomienda alojar la hoja de control en una **carpeta privada** del administrador o cuenta funcional.
 
 ---

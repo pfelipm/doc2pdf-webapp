@@ -151,11 +151,12 @@
           <p class="drive-hint">
             El archivo debe estar compartido en modo lectura con el dominio del centro (<em>"Cualquier usuario de [centro] con el enlace"</em>). Funciona tanto con archivos de escritorio (.docx, .xlsx, .pptx...) como con documentos nativos de Workspace.
           </p>
-          <label class="drive-sheet-toggle">
-            <input type="checkbox" id="driveIsSheetChk">
-            <span>Configurar maquetación PDF para hoja de cálculo</span>
-          </label>
         </div>
+
+        <label class="sheet-layout-toggle" id="sheetLayoutToggle">
+          <input type="checkbox" id="sheetLayoutChk" aria-controls="sheetOptionsPanel">
+          <span>Configurar maquetación PDF para hoja de cálculo</span>
+        </label>
 
         <!-- Panel contextual de opciones PDF para hojas de cálculo -->
         <div id="sheetOptionsPanel" class="sheet-options hidden">
@@ -233,14 +234,15 @@
       <div class="dialog-body preview-dialog-body">
         <div class="preview-toolbar" aria-label="Controles del visor PDF">
           <div class="preview-toolbar-group">
-            <button type="button" class="btn-sm" id="pdfPrevBtn" aria-label="Página anterior" disabled>◀</button>
+            <button type="button" class="btn-sm hidden" id="pdfPrevBtn" aria-label="Página anterior" title="Página anterior" disabled>◀</button>
             <span id="pdfPageInfo" class="preview-page-info">Página 1 / 1</span>
-            <button type="button" class="btn-sm" id="pdfNextBtn" aria-label="Página siguiente" disabled>▶</button>
+            <button type="button" class="btn-sm hidden" id="pdfNextBtn" aria-label="Página siguiente" title="Página siguiente" disabled>▶</button>
           </div>
           <div class="preview-toolbar-group">
-            <button type="button" class="btn-sm" id="pdfZoomOutBtn" aria-label="Reducir zoom">−</button>
-            <button type="button" class="btn-sm" id="pdfZoomFitBtn" aria-label="Ajustar al ancho">Ajustar</button>
-            <button type="button" class="btn-sm" id="pdfZoomInBtn" aria-label="Ampliar zoom">+</button>
+            <button type="button" class="btn-sm" id="pdfZoomOutBtn" aria-label="Reducir zoom" title="Reducir zoom">−</button>
+            <button type="button" class="btn-sm" id="pdfZoomFitBtn" aria-label="Ajustar al ancho" title="Ajustar al 100 % del ancho" aria-pressed="true">Ajustar ancho</button>
+            <button type="button" class="btn-sm" id="pdfZoomFitPageBtn" aria-label="Ajustar a página completa" title="Ajustar a página completa" aria-pressed="false">Página completa</button>
+            <button type="button" class="btn-sm" id="pdfZoomInBtn" aria-label="Ampliar zoom" title="Ampliar zoom">+</button>
           </div>
         </div>
         <div id="previewStage" class="preview-stage">
