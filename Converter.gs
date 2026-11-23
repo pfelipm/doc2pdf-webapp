@@ -367,13 +367,15 @@ function convertLocalFileDirect_(payload) {
 
     const pdfFileName = buildPdfFileName_(rawName);
     const pdfBlob = exportGoogleFileToPdfBlob_(tempGoogleId, format.exportType, pdfFileName, sheetOpts);
-    const transfer = preparePdfTransfer_(pdfBlob, pdfFileName, jobId, userCtx.email, tempFolderId);
+    const transfer = preparePdfTransfer_(pdfBlob, pdfFileName, jobId, userCtx.realEmail || userCtx.email, tempFolderId);
     const durationMs = Date.now() - startedAt;
 
-    incrementUserDailyUsage_(userCtx.email);
+    if (!userCtx.quotaExempt) {
+      incrementUserDailyUsage_(userCtx.email);
+    }
     logAuditJob_({
       jobId: jobId,
-      userEmail: userCtx.displayEmail,
+      userEmail: userCtx.auditEmail || userCtx.displayEmail,
       origin: 'Local',
       fileName: rawName,
       ext: ext,
@@ -397,7 +399,7 @@ function convertLocalFileDirect_(payload) {
     const durationMs = Date.now() - startedAt;
     logAuditJob_({
       jobId: jobId,
-      userEmail: userCtx.displayEmail,
+      userEmail: userCtx.auditEmail || userCtx.displayEmail,
       origin: 'Local',
       fileName: rawName,
       ext: ext,
@@ -484,8 +486,10 @@ function initChunkedUpload_(payload) {
     sourceMime: format.sourceMime,
     totalBytes: totalBytes,
     tempFolderId: tempFolderId,
-    userEmail: userCtx.email,
-    displayEmail: userCtx.displayEmail,
+    userEmail: userCtx.realEmail || userCtx.email,
+    quotaEmail: userCtx.email,
+    quotaExempt: Boolean(userCtx.quotaExempt),
+    displayEmail: userCtx.auditEmail || userCtx.displayEmail,
     sheetOptions: sheetOpts,
     startedAtMs: Date.now(),
     googleFileId: ''
@@ -587,7 +591,9 @@ function finalizeChunkedConversion_(payload) {
     );
     const durationMs = Date.now() - session.startedAtMs;
 
-    incrementUserDailyUsage_(session.userEmail);
+    if (!session.quotaExempt) {
+      incrementUserDailyUsage_(session.quotaEmail || session.userEmail);
+    }
     logAuditJob_({
       jobId: session.jobId,
       userEmail: session.displayEmail,
@@ -785,13 +791,15 @@ function convertDriveUrl_(payload) {
 
       const pdfFileName = buildPdfFileName_(resolvedName);
       const pdfBlob = exportGoogleFileToPdfBlob_(actualFileId, nativeFormat.exportType, pdfFileName, sheetOpts);
-      const transfer = preparePdfTransfer_(pdfBlob, pdfFileName, jobId, userCtx.email, tempFolderId);
+      const transfer = preparePdfTransfer_(pdfBlob, pdfFileName, jobId, userCtx.realEmail || userCtx.email, tempFolderId);
       const durationMs = Date.now() - startedAt;
 
-      incrementUserDailyUsage_(userCtx.email);
+      if (!userCtx.quotaExempt) {
+        incrementUserDailyUsage_(userCtx.email);
+      }
       logAuditJob_({
         jobId: jobId,
-        userEmail: userCtx.displayEmail,
+        userEmail: userCtx.auditEmail || userCtx.displayEmail,
         origin: 'Enlace Drive',
         fileName: resolvedName,
         ext: resolvedExt,
@@ -867,13 +875,15 @@ function convertDriveUrl_(payload) {
 
     const pdfFileName = buildPdfFileName_(resolvedName);
     const pdfBlob = exportGoogleFileToPdfBlob_(tempGoogleId, desktopFormat.exportType, pdfFileName, sheetOpts);
-    const transfer = preparePdfTransfer_(pdfBlob, pdfFileName, jobId, userCtx.email, tempFolderId);
+    const transfer = preparePdfTransfer_(pdfBlob, pdfFileName, jobId, userCtx.realEmail || userCtx.email, tempFolderId);
     const durationMs = Date.now() - startedAt;
 
-    incrementUserDailyUsage_(userCtx.email);
+    if (!userCtx.quotaExempt) {
+      incrementUserDailyUsage_(userCtx.email);
+    }
     logAuditJob_({
       jobId: jobId,
-      userEmail: userCtx.displayEmail,
+      userEmail: userCtx.auditEmail || userCtx.displayEmail,
       origin: 'Enlace Drive',
       fileName: resolvedName,
       ext: resolvedExt,
@@ -899,7 +909,7 @@ function convertDriveUrl_(payload) {
     const isSecurityRejection = err && (err.code === 'DRIVE_ACCESS_FORBIDDEN' || err.code === 'DRIVE_ACCESS_NOT_SHARED');
     logAuditJob_({
       jobId: jobId,
-      userEmail: userCtx.displayEmail,
+      userEmail: userCtx.auditEmail || userCtx.displayEmail,
       origin: 'Enlace Drive',
       fileName: resolvedName,
       ext: resolvedExt,

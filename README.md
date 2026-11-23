@@ -13,7 +13,7 @@ Microservicio web ligero e interno para **Google Workspace** desarrollado ínteg
 - **100 % nativo y sin dependencias externas por defecto:**
   - Backend exclusivamente con Apps Script, **Drive API v3** (servicio avanzado nativo) y `UrlFetchApp`.
   - Frontend y diálogos HTML5 + CSS3 + Vanilla JS + iconos SVG embebidos, incluyendo empaquetador **`.zip` nativo** en navegador para descargar lotes completos sin librerías externas.
-  - Visor PDF embebido opcional (`VISOR_PDF_EMBEBIDO = SI`) sobre `<canvas>` con **PDF.js** cargado bajo demanda (si se mantiene en `NO`, abre el PDF directamente en una nueva pestaña con cero dependencias externas).
+  - Visor PDF embebido opcional (`VISOR_PDF_EMBEBIDO`, casilla desmarcada por defecto) sobre `<canvas>` con **PDF.js** cargado bajo demanda; si se mantiene desmarcada (`NO`), abre el PDF directamente en una nueva pestaña con cero dependencias externas.
 - **Soporte completo de documentos de escritorio (21 extensiones + nativos Workspace):**
   - **Documentos:** `.docx`, `.doc`, `.dot`, `.dotx`, `.odt`, `.rtf`
   - **Hojas de cálculo:** `.xlsx`, `.xls`, `.xlt`, `.xltx`, `.xlsm`, `.ods`, `.csv`, `.tsv` *(con selector de papel, orientación, ajuste al ancho, cuadrícula y márgenes)*
@@ -109,6 +109,16 @@ La raíz del repositorio coincide con el directorio raíz de `clasp` (`rootDir: 
    - Copia la URL generada terminada en `/exec`.
    - En la hoja de cálculo, abre **`📄 Doc2PDF → 🚀 Configurar URL de WebApp`**, pega la URL y pulsa **Guardar URL**.
 
+### Pruebas con impersonación (solo desarrollo)
+
+Para validar la experiencia de un usuario estándar (modo mantenimiento, listas blancas/negras, restricción de dominio o cuota diaria) sin necesitar una segunda cuenta en el dominio, [Auth.gs](Auth.gs) incluye dos constantes de simulación apagadas por defecto (`DEV_IMPERSONATE_ENABLED_ = false` y `DEV_IMPERSONATE_EMAIL_ = ''`):
+
+- **Activación temporal en entorno `/dev`:** cambia ambas constantes en tu copia local / editor de Apps Script hacia un correo de prueba de tu dominio, abre la implementación de pruebas (`/dev`) y **devuélvelas a `false` / `''` antes de publicar `/exec` o confirmar en Git** (la suite de verificación falla si quedan activas).
+- **Salvaguardas integradas:**
+  - **Exclusivo de la cuenta desplegadora:** solo surte efecto si la sesión real coincide con `Session.getEffectiveUser()` (los co-editores de la hoja y usuarios normales no pueden suplantar identidades).
+  - **Banner permanente y trazabilidad:** la WebApp muestra un aviso rojo superior en todo momento (incluso en pantallas de bloqueo) y `Auditoría` registra la fila como `<simulado> [simulado por <desplegador>]`.
+  - **Sin impacto en cuotas de terceros:** las conversiones realizadas en modo simulación no incrementan la cuota diaria del usuario simulado ni su recuento en `Auditoría`; las operaciones del menú en Google Sheets siguen validando la identidad real.
+
 ---
 
 ## Ajustes configurables (`Ajustes`)
@@ -121,27 +131,28 @@ La pestaña `Ajustes` incorpora validaciones estrictas de datos sobre sus 21 par
 | `SUBTITULO_CENTRO` | `Conversor interno de documentos a PDF` | Texto (máx. 120 car.) | Subtítulo institucional en cabecera |
 | `COLOR_ACENTO` | `#1a73e8` | Color Hex (`#RRGGBB`) | Color principal de botones, iconos y realces |
 | `LOGO_URL` | *(vacío)* | URL `https://` | URL HTTPS opcional del logotipo |
-| `SERVICIO_ACTIVO` | `SI` | Casilla (`SI` / `NO`) | Activa (`SI`) o pausa en mantenimiento (`NO`) |
-| `MENSAJE_MANTENIMIENTO` | *(mensaje estándar)* | Texto (máx. 300 car.) | Aviso mostrado cuando `SERVICIO_ACTIVO = NO` |
+| `SERVICIO_ACTIVO` | `SI` *(marcada)* | Casilla (`SI` / `NO`) | Activa (marcada) o pausa en modo mantenimiento (desmarcada) el conversor |
+| `MENSAJE_MANTENIMIENTO` | *(mensaje estándar)* | Texto (máx. 300 car.) | Aviso mostrado cuando `SERVICIO_ACTIVO` está desmarcado |
 | `DOMINIOS_PERMITIDOS` | *(vacío)* | Lista por comas | Dominios Workspace permitidos (vacío = dominio del desplegador) |
 | `LISTA_BLANCA_USUARIOS` | *(vacío)* | Lista por comas | Correos autorizados (vacío = todo el dominio) |
 | `LISTA_NEGRA_USUARIOS` | *(vacío)* | Lista por comas | Correos bloqueados |
 | `LIMITE_DIARIO_USUARIO` | `30` | Numérico (`0 – 10 000`) | Conversiones máximas por usuario al día (`0` = sin límite; sugerido) |
 | `TAMANO_MAX_MB` | `20` | Numérico (`1 – 45`) | Peso máximo por archivo en MB *(límite técnico seguro bajo tope de 50 MB de Apps Script)* |
 | `MAX_ARCHIVOS_LOTE` | `5` | Numérico (`1 – 20`) | Máximo de archivos admitidos por lote al arrastrar o seleccionar *(sugerido)* |
-| `PERMITIR_DOCUMENTOS` | `SI` | Casilla (`SI` / `NO`) | Habilita documentos de texto (`.docx`, `.doc`, `.dot`, `.dotx`, `.odt`, `.rtf`) |
-| `PERMITIR_HOJAS` | `SI` | Casilla (`SI` / `NO`) | Habilita hojas de cálculo (`.xlsx`, `.xls`, `.xlt`, `.xltx`, `.xlsm`, `.ods`, `.csv`, `.tsv`) |
-| `PERMITIR_PRESENTACIONES` | `SI` | Casilla (`SI` / `NO`) | Habilita presentaciones (`.pptx`, `.ppt`, `.odp`) |
-| `PERMITIR_TEXTO` | `SI` | Casilla (`SI` / `NO`) | Habilita texto plano y marcado (`.txt`, `.md`, `.html`, `.htm`) |
-| `PERMITIR_ENLACE_DRIVE` | `SI` | Casilla (`SI` / `NO`) | Habilita la pestaña de conversión por enlace/ID de Drive |
-| `VISOR_PDF_EMBEBIDO` | `NO` | Casilla (`SI` / `NO`) | Activa (`SI`) el visor modal en `<canvas>` con PDF.js bajo demanda; si es `NO`, abre el PDF en pestaña nueva sin librerías externas |
+| `PERMITIR_DOCUMENTOS` | `SI` *(marcada)* | Casilla (`SI` / `NO`) | Habilita documentos de texto (`.docx`, `.doc`, `.dot`, `.dotx`, `.odt`, `.rtf`) |
+| `PERMITIR_HOJAS` | `SI` *(marcada)* | Casilla (`SI` / `NO`) | Habilita hojas de cálculo (`.xlsx`, `.xls`, `.xlt`, `.xltx`, `.xlsm`, `.ods`, `.csv`, `.tsv`) |
+| `PERMITIR_PRESENTACIONES` | `SI` *(marcada)* | Casilla (`SI` / `NO`) | Habilita presentaciones (`.pptx`, `.ppt`, `.odp`) |
+| `PERMITIR_TEXTO` | `SI` *(marcada)* | Casilla (`SI` / `NO`) | Habilita texto plano y marcado (`.txt`, `.md`, `.html`, `.htm`) |
+| `PERMITIR_ENLACE_DRIVE` | `SI` *(marcada)* | Casilla (`SI` / `NO`) | Habilita la pestaña de conversión por enlace/ID de Drive |
+| `VISOR_PDF_EMBEBIDO` | `NO` *(desmarcada)* | Casilla (`SI` / `NO`) | Si está marcada, usa el visor modal en `<canvas>` con PDF.js bajo demanda; desmarcada, abre el PDF en pestaña nueva sin librerías externas |
 | `REGISTRAR_NOMBRE_ARCHIVO` | `COMPLETO` | Desplegable (`COMPLETO` / `ANONIMIZADO` / `NINGUNO`) | Nivel de privacidad del nombre registrado en `Auditoría` |
 | `RETENCION_AUDITORIA_DIAS` | `180` | Numérico (`0 – 3 650`) | Días de retención automática (`0` = indefinido; sugerido) |
 | `CARPETA_TEMP_ID` | *(automático)* | Texto (ID Drive) | ID de la subcarpeta `_Doc2PDF_Temp` creada junto a esta hoja |
 
-> **Notas importantes:**
+> [!NOTE]
 > - **Caché:** los ajustes se cachean durante **5 minutos**. Tras editar la pestaña `Ajustes`, puedes aplicar los cambios al instante ejecutando **`📄 Doc2PDF → 🛠️ Mantenimiento → 🔄 Limpiar caché de ajustes`**.
-> - **Equipo administrador y modo mantenimiento:** el rol de administración se determina por la cuenta desplegadora del script más el **propietario y los editores explícitos** de la Google Sheet de control (cacheado 60 s). Quienes pertenezcan a este grupo mantienen acceso de pruebas con un banner de aviso cuando `SERVICIO_ACTIVO = NO` (mientras el resto de usuarios queda bloqueado) y quedan exentos de `LISTA_BLANCA_USUARIOS` y `DOMINIOS_PERMITIDOS`.
+> - **Equipo administrador y modo mantenimiento:** el rol de administración se determina por la cuenta desplegadora del script más el **propietario y los editores explícitos** de la Google Sheet de control (cacheado 60 s). Quienes pertenezcan a este grupo mantienen acceso de pruebas con un banner de aviso cuando `SERVICIO_ACTIVO` está desmarcado (`NO`) —mientras el resto de usuarios queda bloqueado— y quedan exentos de `LISTA_BLANCA_USUARIOS`, `DOMINIOS_PERMITIDOS` y `LIMITE_DIARIO_USUARIO` (`Sin límite (Admin)` en la cabecera, conservando el registro en `Auditoría`).
+> - **Cuota diaria y caché:** `LIMITE_DIARIO_USUARIO` se calcula mediante caché (`ScriptCache`, TTL máximo de 6 h) respaldada sobre `Auditoría` en la zona horaria de la hoja de cálculo, contabilizando únicamente conversiones finalizadas con estado `OK`.
 > - **Concurrencia de conversión:** `MAX_ARCHIVOS_LOTE` limita cuántos archivos entran en cola en cada envío; la WebApp los procesa de **2 en 2** en paralelo (`DIRECT_CONCURRENCY = 2`) para subidas directas (`<= 6 MB`) y enlaces de Drive, y de **1 en 1** en subidas fragmentadas (`> 6 MB`), protegiendo así el cupo compartido de 30 ejecuciones simultáneas de Apps Script.
 > - **Carpeta temporal y privacidad:** `_Doc2PDF_Temp` se crea automáticamente como subcarpeta en la misma carpeta donde reside la Google Sheet (heredando sus permisos). Se recomienda alojar la hoja de control en una **carpeta privada** del administrador o cuenta funcional.
 

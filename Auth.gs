@@ -6,6 +6,12 @@
 
 const ADMIN_LIST_CACHE_KEY_ = 'DOC2PDF_ADMINS_V1';
 const DIALOG_TOKEN_TTL_SEC_ = 1800;
+const QUOTA_CACHE_TTL_SEC_ = 21600; // Máximo permitido por CacheService.put() en Apps Script (6 horas)
+
+// SOLO DESARROLLO / QA: deben permanecer desactivadas en producción y Git.
+// Solo surten efecto cuando el usuario real es la cuenta desplegadora (real === effective).
+const DEV_IMPERSONATE_ENABLED_ = false;
+const DEV_IMPERSONATE_EMAIL_ = '';
 
 /**
  * Obtiene el correo real del usuario activo autenticado en Google Workspace.
@@ -17,6 +23,51 @@ function getRealActiveEmail_() {
   } catch (e) {
     return '';
   }
+}
+
+/**
+ * Resuelve la identidad efectiva de la petición web aplicando, si procede,
+ * la impersonación de desarrollo estrictamente restringida al desplegador real.
+ * @param {string} realEmail
+ * @param {string} effectiveEmail
+ * @param {{enabled: boolean, email: string}=} overrideOpt Solo uso en pruebas automatizadas.
+ * @return {{email: string, realEmail: string, isImpersonating: boolean, auditEmail: string}}
+ */
+function resolveEffectiveIdentity_(realEmail, effectiveEmail, overrideOpt) {
+  const cleanReal = String(realEmail || '').trim().toLowerCase();
+  const cleanEff = String(effectiveEmail || '').trim().toLowerCase();
+  const cfg = overrideOpt || {
+    enabled: DEV_IMPERSONATE_ENABLED_,
+    email: DEV_IMPERSONATE_EMAIL_
+  };
+  const target = String((cfg && cfg.email) || '').trim().toLowerCase();
+
+  const canImpersonate = Boolean(
+    cfg &&
+    cfg.enabled === true &&
+    target &&
+    target.indexOf('@') !== -1 &&
+    cleanReal &&
+    cleanEff &&
+    cleanReal === cleanEff &&
+    target !== cleanReal
+  );
+
+  if (canImpersonate) {
+    return {
+      email: target,
+      realEmail: cleanReal,
+      isImpersonating: true,
+      auditEmail: target + ' [simulado por ' + cleanReal + ']'
+    };
+  }
+
+  return {
+    email: cleanReal,
+    realEmail: cleanReal,
+    isImpersonating: false,
+    auditEmail: cleanReal
+  };
 }
 
 /**
@@ -186,10 +237,11 @@ function assertAdminDialogCall_(dialogToken, actionLabel) {
 }
 
 /**
- * Devuelve la clave de fecha de hoy en la zona horaria del script (yyyy-MM-dd).
+ * Devuelve la clave de fecha de hoy en la zona horaria local de la hoja (yyyy-MM-dd).
  */
 function getTodayDateKey_() {
-  return Utilities.formatDate(new Date(), 'Europe/Madrid', 'yyyy-MM-dd');
+  const tz = typeof getLocalTimeZone_ === 'function' ? getLocalTimeZone_() : 'Europe/Madrid';
+  return Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
 }
 
 /**
@@ -227,12 +279,13 @@ function getUserDailyUsage_(email) {
     const ss = getSpreadsheet_();
     const sheet = ss ? ss.getSheetByName(SHEET_AUDIT_NAME) : null;
     if (sheet && sheet.getLastRow() >= 2) {
+      const tz = typeof getLocalTimeZone_ === 'function' ? getLocalTimeZone_(ss) : 'Europe/Madrid';
       const todayKey = getTodayDateKey_();
       const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 11).getValues();
       for (let i = rows.length - 1; i >= 0; i--) {
         const ts = rows[i][0];
         if (!(ts instanceof Date)) continue;
-        const rowDay = Utilities.formatDate(ts, 'Europe/Madrid', 'yyyy-MM-dd');
+        const rowDay = Utilities.formatDate(ts, tz, 'yyyy-MM-dd');
         if (rowDay === todayKey) {
           const rowUser = String(rows[i][2] || '').trim().toLowerCase();
           const rowStatus = String(rows[i][10] || '').trim().toUpperCase();
@@ -248,7 +301,7 @@ function getUserDailyUsage_(email) {
 
   try {
     if (cache) {
-      cache.put(cacheKey, String(count), 86400);
+      cache.put(cacheKey, String(count), QUOTA_CACHE_TTL_SEC_);
     }
   } catch (e) {
     console.warn('Error guardando caché de cuota:', e.message);
@@ -269,7 +322,7 @@ function incrementUserDailyUsage_(email) {
     const cache = CacheService.getScriptCache();
     if (!cache) return;
     const current = getUserDailyUsage_(cleanEmail);
-    cache.put(cacheKey, String(current + 1), 86400);
+    cache.put(cacheKey, String(current + 1), QUOTA_CACHE_TTL_SEC_);
   } catch (e) {
     console.warn('Error incrementando cuota diaria:', e.message);
   }
@@ -277,13 +330,14 @@ function incrementUserDailyUsage_(email) {
 
 /**
  * Evalúa la identidad (Fail-Closed), permisos de acceso, bypass admin en mantenimiento
- * y cuota restante del usuario activo.
+ * y cuota restante del usuario activo (con exención de cuota para administradores e impersonación).
  * @param {Object=} config
+ * @param {{enabled: boolean, email: string}=} impersonationOverrideOpt Solo uso en pruebas automatizadas.
  * @return {Object}
  */
-function getUserContext_(config) {
+function getUserContext_(config, impersonationOverrideOpt) {
   const cfg = config || getConfig_();
-  const activeEmail = getRealActiveEmail_();
+  const realEmail = getRealActiveEmail_();
   let effectiveEmail = '';
 
   try {
@@ -292,20 +346,32 @@ function getUserContext_(config) {
     effectiveEmail = '';
   }
 
+  const identity = resolveEffectiveIdentity_(realEmail, effectiveEmail, impersonationOverrideOpt);
+  const activeEmail = identity.email;
   const dailyLimit = cfg.LIMITE_DIARIO_USUARIO;
   const isAdmin = isSpreadsheetAdminEmail_(activeEmail);
+  const quotaExempt = Boolean(isAdmin || identity.isImpersonating);
+  const impersonationBanner = identity.isImpersonating
+    ? 'Modo simulación activo: viendo la WebApp como ' + activeEmail + ' (sesión real: ' + identity.realEmail + ' · sin consumo de cuota).'
+    : '';
+
   const baseContext = {
     allowed: false,
     code: 'NO_SESSION_EMAIL',
     reason: '',
     email: activeEmail,
+    realEmail: identity.realEmail,
     displayEmail: activeEmail || '',
+    auditEmail: identity.auditEmail || '',
     domain: activeEmail && activeEmail.indexOf('@') !== -1 ? activeEmail.split('@')[1] : '',
     isAdmin: isAdmin,
+    quotaExempt: quotaExempt,
+    isImpersonating: identity.isImpersonating,
+    impersonationBanner: impersonationBanner,
     maintenanceBanner: '',
     dailyUsed: 0,
     dailyLimit: dailyLimit,
-    remainingToday: dailyLimit > 0 ? dailyLimit : null,
+    remainingToday: (dailyLimit > 0 && !isAdmin) ? dailyLimit : null,
     isServiceActive: cfg.SERVICIO_ACTIVO,
     maintenanceMessage: cfg.MENSAJE_MANTENIMIENTO,
     identityExposed: Boolean(activeEmail)
@@ -365,9 +431,9 @@ function getUserContext_(config) {
 
   const used = getUserDailyUsage_(activeEmail);
   baseContext.dailyUsed = used;
-  baseContext.remainingToday = dailyLimit > 0 ? Math.max(0, dailyLimit - used) : null;
+  baseContext.remainingToday = (dailyLimit > 0 && !isAdmin) ? Math.max(0, dailyLimit - used) : null;
 
-  if (dailyLimit > 0 && used >= dailyLimit) {
+  if (dailyLimit > 0 && !isAdmin && used >= dailyLimit) {
     baseContext.code = 'QUOTA_EXCEEDED';
     baseContext.reason = 'Has alcanzado el límite diario de ' + dailyLimit + ' conversiones. Podrás volver a convertir mañana.';
     return baseContext;
@@ -392,7 +458,7 @@ function assertAuthorizedForJob_(config, originLabel, fileNameForLog, extForLog,
   const ctx = getUserContext_(config);
   if (!ctx.allowed) {
     recordSecurityRejection_(
-      ctx.displayEmail || 'anonimo',
+      ctx.auditEmail || ctx.displayEmail || 'anonimo',
       originLabel || 'Local',
       fileNameForLog || '(solicitud)',
       ctx.code,

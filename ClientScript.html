@@ -500,6 +500,17 @@
 
     document.getElementById('loadingSection').classList.add('hidden');
 
+    const impBanner = document.getElementById('impersonationBanner');
+    if (impBanner) {
+      if (cfg.user && cfg.user.isImpersonating) {
+        document.getElementById('impersonationBannerText').textContent =
+          cfg.user.impersonationBanner || ('Modo simulación activo: ' + cfg.user.email);
+        impBanner.classList.remove('hidden');
+      } else {
+        impBanner.classList.add('hidden');
+      }
+    }
+
     if (!cfg.user || !cfg.user.allowed) {
       document.getElementById('blockedSection').classList.remove('hidden');
       document.getElementById('blockedTitle').textContent =
@@ -554,9 +565,13 @@
     const quotaEl = document.getElementById('quotaBadge');
 
     emailEl.textContent = user.identityExposed ? user.email : 'Sesión Workspace';
-    if (user.dailyLimit > 0) {
+    if (user.isAdmin) {
+      quotaEl.textContent = 'Sin límite (Admin)';
+    } else if (user.dailyLimit > 0) {
       const rem = typeof user.remainingToday === 'number' ? user.remainingToday : user.dailyLimit;
-      quotaEl.textContent = rem + '/' + user.dailyLimit + ' hoy';
+      quotaEl.textContent = user.isImpersonating
+        ? rem + '/' + user.dailyLimit + ' hoy (simulado)'
+        : rem + '/' + user.dailyLimit + ' hoy';
     } else {
       quotaEl.textContent = 'Sin límite diario';
     }
@@ -564,7 +579,7 @@
   }
 
   function decrementQuotaUi() {
-    if (!state.config || !state.config.user || !state.config.user.dailyLimit) return;
+    if (!state.config || !state.config.user || !state.config.user.dailyLimit || state.config.user.quotaExempt) return;
     const u = state.config.user;
     if (typeof u.remainingToday === 'number' && u.remainingToday > 0) {
       u.remainingToday -= 1;
