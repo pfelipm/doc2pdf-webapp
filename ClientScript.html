@@ -564,7 +564,10 @@
     const emailEl = document.getElementById('userEmailText');
     const quotaEl = document.getElementById('quotaBadge');
 
-    emailEl.textContent = user.identityExposed ? user.email : 'Sesión Workspace';
+    const fullEmail = user.identityExposed ? user.email : 'Sesión Workspace';
+    emailEl.textContent = fullEmail;
+    emailEl.title = user.identityExposed ? user.email : 'Sesión Workspace activa';
+    pill.title = emailEl.title;
     if (user.isAdmin) {
       quotaEl.textContent = 'Sin límite (Admin)';
     } else if (user.dailyLimit > 0) {

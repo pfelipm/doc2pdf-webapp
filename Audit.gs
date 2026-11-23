@@ -133,7 +133,7 @@ function logAuditJob_(entry, config) {
       sanitizeCellValue_(entry.jobId || ''),
       sanitizeCellValue_(entry.userEmail || 'usuario-dominio'),
       sanitizeCellValue_(entry.origin || 'Local'),
-      formatAuditedFileName_(entry.fileName, entry.ext, cfg.REGISTRAR_NOMBRE_ARCHIVO),
+      defangAutoLinkText_(formatAuditedFileName_(entry.fileName, entry.ext, cfg.REGISTRAR_NOMBRE_ARCHIVO)),
       sanitizeCellValue_(entry.ext || ''),
       sanitizeCellValue_(entry.family || ''),
       inputKB,
@@ -275,17 +275,35 @@ function getSpreadsheetLocaleBcp47_(ssOpt) {
 }
 
 /**
+ * Inserta un espacio de ancho cero (\u200B) tras puntos antes de sufijos tipo dominio/TLD y en
+ * esquemas URL para neutralizar la detección automática de enlaces de Google Sheets manteniendo
+ * la apariencia visual idéntica. Idempotente.
+ * @param {*} text
+ * @return {string}
+ */
+function defangAutoLinkText_(text) {
+  const clean = (text === null || text === undefined ? '' : String(text)).replace(/\u200B/g, '');
+  if (!clean) return '';
+  return clean
+    .replace(/:\/\//g, ':\u200B//')
+    .replace(/\.([a-zA-Z]{2,})/g, '.\u200B$1');
+}
+
+/**
  * Escribe texto plano en una celda desactivando la conversión automática de enlaces (p. ej. *.md).
  * @param {GoogleAppsScript.Spreadsheet.Range} range
  * @param {*} text
  */
 function setPlainTextNoLink_(range, text) {
   if (!range) return;
-  const str = text === null || text === undefined ? '' : String(text);
+  const safeStr = defangAutoLinkText_(text);
   range.setNumberFormat('@');
+  if (typeof range.setValue === 'function') {
+    range.setValue(safeStr);
+  }
   if (typeof SpreadsheetApp !== 'undefined' && typeof SpreadsheetApp.newRichTextValue === 'function' && typeof range.setRichTextValue === 'function') {
-    const builder = SpreadsheetApp.newRichTextValue().setText(str);
-    if (str) {
+    const builder = SpreadsheetApp.newRichTextValue().setText(safeStr);
+    if (safeStr) {
       builder.setLinkUrl(null);
     }
     range.setRichTextValue(builder.build());
@@ -303,20 +321,27 @@ function clearColumnLinksAsPlainText_(sheet, startRow, numRows, colIndex) {
   if (!sheet || numRows <= 0) return;
   const range = sheet.getRange(startRow, colIndex, numRows, 1);
   range.setNumberFormat('@');
-  if (typeof SpreadsheetApp === 'undefined' || typeof SpreadsheetApp.newRichTextValue !== 'function' || typeof range.setRichTextValues !== 'function') {
-    return;
-  }
   const values = range.getValues();
+  const safeMatrix = [];
   const richValues = [];
+  const hasRich = typeof SpreadsheetApp !== 'undefined' && typeof SpreadsheetApp.newRichTextValue === 'function' && typeof range.setRichTextValues === 'function';
   for (let i = 0; i < values.length; i++) {
-    const str = values[i][0] === null || values[i][0] === undefined ? '' : String(values[i][0]);
-    const builder = SpreadsheetApp.newRichTextValue().setText(str);
-    if (str) {
-      builder.setLinkUrl(null);
+    const safeStr = defangAutoLinkText_(values[i][0]);
+    safeMatrix.push([safeStr]);
+    if (hasRich) {
+      const builder = SpreadsheetApp.newRichTextValue().setText(safeStr);
+      if (safeStr) {
+        builder.setLinkUrl(null);
+      }
+      richValues.push([builder.build()]);
     }
-    richValues.push([builder.build()]);
   }
-  range.setRichTextValues(richValues);
+  if (typeof range.setValues === 'function') {
+    range.setValues(safeMatrix);
+  }
+  if (hasRich) {
+    range.setRichTextValues(richValues);
+  }
 }
 
 /**
@@ -400,7 +425,7 @@ function computeDashboardAnalytics_(rows, daysFilter, nowDate, healthEstado) {
     const status = String(r[10] || '').trim().toUpperCase();
     const user = String(r[2] || 'usuario-dominio').trim();
     const originRaw = String(r[3] || 'Local').trim();
-    const file = String(r[4] || '');
+    const file = String(r[4] || '').replace(/\u200B/g, '');
     const ext = String(r[5] || '').trim().toLowerCase();
     const familyRaw = String(r[6] || '').trim().toUpperCase();
     const inputKB = Number(r[7]) || 0;

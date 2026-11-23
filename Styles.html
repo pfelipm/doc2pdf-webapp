@@ -258,15 +258,17 @@
     border: 1px solid var(--border);
     font-size: 12px;
     color: var(--text);
-    max-width: 280px;
+    max-width: min(460px, 100%);
   }
   .user-email {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-weight: 600;
   }
   .quota-badge {
+    flex-shrink: 0;
     font-size: 11px;
     font-weight: 700;
     padding: 2px 7px;
