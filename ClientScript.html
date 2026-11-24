@@ -131,6 +131,13 @@
       }
     };
 
+    document.getElementById('pdfFirstBtn').addEventListener('click', function () {
+      if (state.preview.doc && state.preview.pageNum > 1) {
+        state.preview.pageNum = 1;
+        resetPreviewScroll();
+        renderCurrentPdfPage();
+      }
+    });
     document.getElementById('pdfPrevBtn').addEventListener('click', function () {
       if (state.preview.doc && state.preview.pageNum > 1) {
         state.preview.pageNum -= 1;
@@ -141,6 +148,13 @@
     document.getElementById('pdfNextBtn').addEventListener('click', function () {
       if (state.preview.doc && state.preview.pageNum < state.preview.totalPages) {
         state.preview.pageNum += 1;
+        resetPreviewScroll();
+        renderCurrentPdfPage();
+      }
+    });
+    document.getElementById('pdfLastBtn').addEventListener('click', function () {
+      if (state.preview.doc && state.preview.pageNum < state.preview.totalPages) {
+        state.preview.pageNum = state.preview.totalPages;
         resetPreviewScroll();
         renderCurrentPdfPage();
       }
@@ -171,7 +185,17 @@
     });
     document.getElementById('previewDialog').addEventListener('keydown', function (ev) {
       if (!state.preview.doc) return;
-      if (ev.key === 'ArrowLeft' && state.preview.pageNum > 1) {
+      if (ev.key === 'Home' && state.preview.pageNum > 1) {
+        ev.preventDefault();
+        state.preview.pageNum = 1;
+        resetPreviewScroll();
+        renderCurrentPdfPage();
+      } else if (ev.key === 'End' && state.preview.pageNum < state.preview.totalPages) {
+        ev.preventDefault();
+        state.preview.pageNum = state.preview.totalPages;
+        resetPreviewScroll();
+        renderCurrentPdfPage();
+      } else if (ev.key === 'ArrowLeft' && state.preview.pageNum > 1) {
         ev.preventDefault();
         state.preview.pageNum -= 1;
         resetPreviewScroll();
@@ -1075,8 +1099,10 @@
     const p = state.preview;
     const hasDoc = Boolean(p.doc);
     const isMultiPage = hasDoc && p.totalPages > 1;
+    const firstBtn = document.getElementById('pdfFirstBtn');
     const prevBtn = document.getElementById('pdfPrevBtn');
     const nextBtn = document.getElementById('pdfNextBtn');
+    const lastBtn = document.getElementById('pdfLastBtn');
     const fitWidthBtn = document.getElementById('pdfZoomFitBtn');
     const fitPageBtn = document.getElementById('pdfZoomFitPageBtn');
 
@@ -1084,10 +1110,18 @@
       ? 'Página ' + p.pageNum + ' / ' + p.totalPages
       : 'Página —';
 
+    if (firstBtn) {
+      firstBtn.classList.toggle('hidden', !isMultiPage);
+      firstBtn.disabled = !isMultiPage || p.pageNum <= 1;
+    }
     prevBtn.classList.toggle('hidden', !isMultiPage);
     nextBtn.classList.toggle('hidden', !isMultiPage);
     prevBtn.disabled = !isMultiPage || p.pageNum <= 1;
     nextBtn.disabled = !isMultiPage || p.pageNum >= p.totalPages;
+    if (lastBtn) {
+      lastBtn.classList.toggle('hidden', !isMultiPage);
+      lastBtn.disabled = !isMultiPage || p.pageNum >= p.totalPages;
+    }
 
     document.getElementById('pdfZoomOutBtn').disabled = !hasDoc;
     fitWidthBtn.disabled = !hasDoc;

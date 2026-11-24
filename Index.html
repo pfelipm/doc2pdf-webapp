@@ -241,12 +241,14 @@
       </div>
       <div class="dialog-body preview-dialog-body">
         <div class="preview-toolbar" aria-label="Controles del visor PDF">
-          <div class="preview-toolbar-group">
+          <div class="preview-toolbar-group" role="group" aria-label="Navegación de páginas">
+            <button type="button" class="btn-sm hidden" id="pdfFirstBtn" aria-label="Primera página" title="Primera página" disabled><svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect x="1.5" y="2" width="1.8" height="8" rx="0.5"/><polygon points="10.5,2 4.3,6 10.5,10"/></svg></button>
             <button type="button" class="btn-sm hidden" id="pdfPrevBtn" aria-label="Página anterior" title="Página anterior" disabled>◀</button>
             <span id="pdfPageInfo" class="preview-page-info">Página 1 / 1</span>
             <button type="button" class="btn-sm hidden" id="pdfNextBtn" aria-label="Página siguiente" title="Página siguiente" disabled>▶</button>
+            <button type="button" class="btn-sm hidden" id="pdfLastBtn" aria-label="Última página" title="Última página" disabled><svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><polygon points="1.5,2 7.7,6 1.5,10"/><rect x="8.7" y="2" width="1.8" height="8" rx="0.5"/></svg></button>
           </div>
-          <div class="preview-toolbar-group">
+          <div class="preview-toolbar-group" role="group" aria-label="Zoom y ajuste">
             <button type="button" class="btn-sm" id="pdfZoomOutBtn" aria-label="Reducir zoom" title="Reducir zoom">−</button>
             <button type="button" class="btn-sm" id="pdfZoomFitBtn" aria-label="Ajustar al ancho" title="Ajustar al 100 % del ancho" aria-pressed="true">Ajustar ancho</button>
             <button type="button" class="btn-sm" id="pdfZoomFitPageBtn" aria-label="Ajustar a página completa" title="Ajustar a página completa" aria-pressed="false">Página completa</button>

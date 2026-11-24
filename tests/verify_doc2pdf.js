@@ -1142,11 +1142,18 @@ assert(setupSrc.includes('template.locale = getSpreadsheetLocaleBcp47_'), 'showD
 
 // 4.14 Visor PDF: ocultación de flechas en 1 página, estados desactivados en extremos, ajuste 100% ancho y página completa
 const indexHtmlSrc = fs.readFileSync(path.join(srcDir, 'Index.html'), 'utf8');
+assert(indexHtmlSrc.includes('class="btn-sm hidden" id="pdfFirstBtn"'), 'Index.html debe ocultar pdfFirstBtn por defecto');
 assert(indexHtmlSrc.includes('class="btn-sm hidden" id="pdfPrevBtn"'), 'Index.html debe ocultar pdfPrevBtn por defecto');
 assert(indexHtmlSrc.includes('class="btn-sm hidden" id="pdfNextBtn"'), 'Index.html debe ocultar pdfNextBtn por defecto');
+assert(indexHtmlSrc.includes('class="btn-sm hidden" id="pdfLastBtn"'), 'Index.html debe ocultar pdfLastBtn por defecto');
+assert(indexHtmlSrc.includes('id="pdfFirstBtn" aria-label="Primera página" title="Primera página" disabled'), 'pdfFirstBtn debe tener title y disabled');
 assert(indexHtmlSrc.includes('id="pdfPrevBtn" aria-label="Página anterior" title="Página anterior" disabled'), 'pdfPrevBtn debe tener title y disabled');
 assert(indexHtmlSrc.includes('id="pdfNextBtn" aria-label="Página siguiente" title="Página siguiente" disabled'), 'pdfNextBtn debe tener title y disabled');
+assert(indexHtmlSrc.includes('id="pdfLastBtn" aria-label="Última página" title="Última página" disabled'), 'pdfLastBtn debe tener title y disabled');
 assert(indexHtmlSrc.includes('id="pdfZoomFitPageBtn"') && indexHtmlSrc.includes('aria-pressed="false">Página completa</button>'), 'Index.html debe incluir botón Página completa con aria-pressed');
+assert(clientHtml.includes("getElementById('pdfFirstBtn').addEventListener('click'"), 'ClientScript.html debe enlazar listener click para pdfFirstBtn');
+assert(clientHtml.includes("getElementById('pdfLastBtn').addEventListener('click'"), 'ClientScript.html debe enlazar listener click para pdfLastBtn');
+assert(clientHtml.includes("ev.key === 'Home'") && clientHtml.includes("ev.key === 'End'"), 'ClientScript.html debe soportar atajos Home/End en el visor PDF');
 
 const stylesHtmlSrc = fs.readFileSync(path.join(srcDir, 'Styles.html'), 'utf8');
 assert(stylesHtmlSrc.includes('.btn-sm:disabled'), 'Styles.html debe definir estilo .btn-sm:disabled');
@@ -1182,8 +1189,10 @@ const makeMockBtn = () => {
   };
 };
 const previewMockEls = {
+  pdfFirstBtn: makeMockBtn(),
   pdfPrevBtn: makeMockBtn(),
   pdfNextBtn: makeMockBtn(),
+  pdfLastBtn: makeMockBtn(),
   pdfZoomOutBtn: makeMockBtn(),
   pdfZoomFitBtn: makeMockBtn(),
   pdfZoomFitPageBtn: makeMockBtn(),
@@ -1210,10 +1219,14 @@ vm.runInContext(
 previewSandbox.state.preview = { doc: {}, pageNum: 1, totalPages: 1, fitMode: 'width' };
 previewSandbox.updatePreviewControls();
 assert.strictEqual(previewMockEls.pdfPageInfo.textContent, 'Página 1 / 1');
+assert.strictEqual(previewMockEls.pdfFirstBtn.classList.contains('hidden'), true);
 assert.strictEqual(previewMockEls.pdfPrevBtn.classList.contains('hidden'), true);
 assert.strictEqual(previewMockEls.pdfNextBtn.classList.contains('hidden'), true);
+assert.strictEqual(previewMockEls.pdfLastBtn.classList.contains('hidden'), true);
+assert.strictEqual(previewMockEls.pdfFirstBtn.disabled, true);
 assert.strictEqual(previewMockEls.pdfPrevBtn.disabled, true);
 assert.strictEqual(previewMockEls.pdfNextBtn.disabled, true);
+assert.strictEqual(previewMockEls.pdfLastBtn.disabled, true);
 assert.strictEqual(previewMockEls.pdfZoomFitBtn.attrs['aria-pressed'], 'true');
 assert.strictEqual(previewMockEls.pdfZoomFitPageBtn.attrs['aria-pressed'], 'false');
 
@@ -1221,18 +1234,26 @@ assert.strictEqual(previewMockEls.pdfZoomFitPageBtn.attrs['aria-pressed'], 'fals
 previewSandbox.state.preview = { doc: {}, pageNum: 1, totalPages: 4, fitMode: 'page' };
 previewSandbox.updatePreviewControls();
 assert.strictEqual(previewMockEls.pdfPageInfo.textContent, 'Página 1 / 4');
+assert.strictEqual(previewMockEls.pdfFirstBtn.classList.contains('hidden'), false);
 assert.strictEqual(previewMockEls.pdfPrevBtn.classList.contains('hidden'), false);
 assert.strictEqual(previewMockEls.pdfNextBtn.classList.contains('hidden'), false);
+assert.strictEqual(previewMockEls.pdfLastBtn.classList.contains('hidden'), false);
+assert.strictEqual(previewMockEls.pdfFirstBtn.disabled, true);
 assert.strictEqual(previewMockEls.pdfPrevBtn.disabled, true);
 assert.strictEqual(previewMockEls.pdfNextBtn.disabled, false);
+assert.strictEqual(previewMockEls.pdfLastBtn.disabled, false);
 assert.strictEqual(previewMockEls.pdfZoomFitBtn.attrs['aria-pressed'], 'false');
 assert.strictEqual(previewMockEls.pdfZoomFitPageBtn.attrs['aria-pressed'], 'true');
 
 // Varias páginas, página intermedia en modo manual -> ambos botones fit desmarcados
 previewSandbox.state.preview = { doc: {}, pageNum: 2, totalPages: 4, fitMode: 'manual' };
 previewSandbox.updatePreviewControls();
+assert.strictEqual(previewMockEls.pdfFirstBtn.classList.contains('hidden'), false);
+assert.strictEqual(previewMockEls.pdfLastBtn.classList.contains('hidden'), false);
+assert.strictEqual(previewMockEls.pdfFirstBtn.disabled, false);
 assert.strictEqual(previewMockEls.pdfPrevBtn.disabled, false);
 assert.strictEqual(previewMockEls.pdfNextBtn.disabled, false);
+assert.strictEqual(previewMockEls.pdfLastBtn.disabled, false);
 assert.strictEqual(previewMockEls.pdfZoomFitBtn.attrs['aria-pressed'], 'false');
 assert.strictEqual(previewMockEls.pdfZoomFitPageBtn.attrs['aria-pressed'], 'false');
 
@@ -1240,10 +1261,14 @@ assert.strictEqual(previewMockEls.pdfZoomFitPageBtn.attrs['aria-pressed'], 'fals
 previewSandbox.state.preview = { doc: {}, pageNum: 4, totalPages: 4, fitMode: 'width' };
 previewSandbox.updatePreviewControls();
 assert.strictEqual(previewMockEls.pdfPageInfo.textContent, 'Página 4 / 4');
+assert.strictEqual(previewMockEls.pdfFirstBtn.classList.contains('hidden'), false);
 assert.strictEqual(previewMockEls.pdfPrevBtn.classList.contains('hidden'), false);
 assert.strictEqual(previewMockEls.pdfNextBtn.classList.contains('hidden'), false);
+assert.strictEqual(previewMockEls.pdfLastBtn.classList.contains('hidden'), false);
+assert.strictEqual(previewMockEls.pdfFirstBtn.disabled, false);
 assert.strictEqual(previewMockEls.pdfPrevBtn.disabled, false);
 assert.strictEqual(previewMockEls.pdfNextBtn.disabled, true);
+assert.strictEqual(previewMockEls.pdfLastBtn.disabled, true);
 
 // Verificación geométrica de computePreviewScale (stage 860x560 => innerW = 830, innerH = 530)
 const mockStage = { clientWidth: 860, clientHeight: 560 };
