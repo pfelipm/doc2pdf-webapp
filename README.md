@@ -46,6 +46,18 @@ Microservicio web ligero e interno para **Google Workspace** desarrollado ínteg
 
 ## Capturas de pantalla
 
+### Interfaz de la WebApp y visor PDF embebido
+
+<p align="center">
+  <img src="assets/dialogo-webapp.png" alt="Interfaz principal de Doc2PDF WebApp mostrando subida de archivos, opciones de exportación PDF para hojas de cálculo y cola de trabajos completados con descarga individual o en ZIP" width="90%" /><br/>
+  <sub><strong>Interfaz WebApp:</strong> subida por arrastre o enlace de Drive, opciones contextuales para hojas de cálculo y cola de trabajos con descarga directa o empaquetada en ZIP.</sub>
+</p>
+
+<p align="center">
+  <img src="assets/dialogo-visor.png" alt="Visor PDF embebido con PDF.js sobre canvas mostrando barra de navegación con botones de primera, anterior, siguiente y última página y controles de zoom" width="90%" /><br/>
+  <sub><strong>Visor PDF embebido (<code>VISOR_PDF_EMBEBIDO</code>):</strong> navegación página a página o a extremos (primera/última), zoom y ajuste al ancho o página completa directamente en el navegador.</sub>
+</p>
+
 ### Hojas de control y panel de analítica en Google Sheets
 
 | Pestaña `Ajustes` (21 parámetros con validaciones) | Pestaña `Auditoría` (registro y filtros activos) |
@@ -107,7 +119,7 @@ La raíz del repositorio coincide con el directorio raíz de `clasp` (`rootDir: 
 │   │   ├── license.svg          # Badge GNU GPL v3.0
 │   │   └── version.svg          # Badge versión del proyecto
 │   ├── banner.jpg               # Banner del repositorio (1376×688, proporción 2:1)
-│   └── *.png                    # 10 capturas de pantalla enlazadas desde README.md (`hdc-*.png`, `dialogo-*.png`)
+│   └── *.png                    # 12 capturas de pantalla enlazadas desde README.md (`hdc-*.png`, `dialogo-*.png`)
 ├── .clasp.json.example          # Plantilla de configuración para clasp (rootDir: ".")
 ├── .claspignore                 # Excluye documentación, assets y metadatos al hacer clasp push
 ├── .gitignore
