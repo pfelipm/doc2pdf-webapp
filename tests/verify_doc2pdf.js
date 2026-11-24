@@ -888,7 +888,7 @@ assert.strictEqual(upOk.success, true);
 const finOk = sandbox.apiFinalizeChunkedUpload({ uploadId: initUp.data.uploadId });
 assert.strictEqual(finOk.success, true);
 
-// 4.9 Setup de Ajustes, validaciones, recorte y carpeta temporal (Opción B + salvaguarda purga)
+// 4.9 Setup de Ajustes, validaciones, recorte y carpeta temporal (junto a la hoja + salvaguarda purga)
 activeEmail = 'admin@centro.edu';
 memProps.set('TEMP_FOLDER_ID', 'FOLDER_TEMP_123');
 ajustesMetrics.cellUpdates = { '22,2': '' };
@@ -957,7 +957,7 @@ assert.strictEqual(pubCfg.embeddedPdfViewer, true);
 assert.strictEqual(sandbox.getFormatByExtension_('xlsx', partialCfg), null);
 assert.strictEqual(sandbox.getFormatByExtension_('docx', partialCfg).ext, 'docx');
 
-// Opción B: _Doc2PDF_Temp creada dentro de la carpeta padre de la hoja ('SHEET_PARENT_DIR') y escrita en CARPETA_TEMP_ID
+// _Doc2PDF_Temp creada dentro de la carpeta padre de la hoja ('SHEET_PARENT_DIR') y escrita en CARPETA_TEMP_ID
 const createdTempFolder = createdDriveFiles.find((f) => f.meta && f.meta.mimeType === 'application/vnd.google-apps.folder');
 assert(createdTempFolder, 'Debe haber creado _Doc2PDF_Temp');
 assert.strictEqual(JSON.stringify(createdTempFolder.meta.parents), JSON.stringify(['SHEET_PARENT_DIR']));

@@ -30,7 +30,7 @@ Microservicio web ligero e interno para **Google Workspace** desarrollado ínteg
   - Subida en dos velocidades: directa Base64 (`<= 6 MB`) y fragmentada por bloques de 2 MB sobre **Resumable Upload de Drive API v3** (`> 6 MB`).
   - Descarga fragmentada automática cuando el PDF resultante supera `7 MB`.
 - **Privacidad, control y cumplimiento RGPD:**
-  - Modelo **Opción A**: ejecutado como administrador / cuenta funcional del centro (`executeAs: "USER_DEPLOYING"`) y restringido al dominio Workspace (`access: "DOMAIN"`). La Google Sheet de control permanece **100 % privada**.
+  - **Despliegue centralizado y hoja privada:** ejecutado como administrador o cuenta funcional del centro (`executeAs: "USER_DEPLOYING"`) y restringido al dominio Workspace (`access: "DOMAIN"`). La Google Sheet de control permanece **100 % privada**.
   - Control de acceso flexible mediante listas mixtas de **cuentas individuales y Google Groups** (`LISTA_NEGRA_USUARIOS` y `LISTA_BLANCA_USUARIOS`), con autohibridación o prefijo estricto `g:grupo@dominio` y precedencia de denegación (*deny overrides allow*).
   - Carpeta temporal dedicada `_Doc2PDF_Temp` creada automáticamente dentro de la carpeta donde reside la Google Sheet (con salvaguarda anti-borrado en purga sobre la propia hoja y subcarpetas).
   - Borrado **permanente** inmediato de temporales (`Drive.Files.remove`) en bloque `finally`, más trigger diario de purga para huérfanos.
