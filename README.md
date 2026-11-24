@@ -97,6 +97,9 @@ La raíz del repositorio coincide con el directorio raíz de `clasp` (`rootDir: 
 
 ```text
 .
+├── .github/
+│   └── workflows/
+│       └── verify.yml           # CI sin credenciales: ejecuta tests/verify_doc2pdf.js en push y PR
 ├── assets/
 │   ├── badges/
 │   │   ├── apps-script.svg      # Badge Google Apps Script V8
@@ -136,10 +139,35 @@ La raíz del repositorio coincide con el directorio raíz de `clasp` (`rootDir: 
 
 ---
 
-## Instalación y despliegue con `clasp`
+## Instalación y despliegue
+
+El proyecto consta de 20 archivos entre código servidor (`.gs`), vistas HTML y manifiesto (`appsscript.json`), por lo que **copiar y pegar manualmente cada archivo no resulta práctico**. Elige una de las tres vías siguientes según tu perfil y completa después los **Pasos finales comunes**.
+
+### Opción A — Plantilla oficial de Google Sheets en 1 clic (Recomendada)
+
+Ideal si quieres poner el servicio en marcha en pocos minutos sin usar terminal ni cuentas adicionales:
+
+1. Con la sesión iniciada en tu cuenta administradora o **cuenta funcional del centro** *(recomendado, p. ej. `servicios-edtech@tucentro.edu`)*, haz clic en **[Crear copia de la plantilla oficial de Doc2PDF WebApp](https://docs.google.com/spreadsheets/d/1ujGd0V42NL3nfTGozgQtj4tsi9_SyBn0cHdiqevxUvw/copy)** y pulsa **Hacer una copia**.
+2. Mueve la hoja copiada a una **carpeta privada** de administración en tu Google Drive *(por ejemplo, `Doc2PDF · Control`)*.
+3. Continúa directamente con los **[Pasos finales comunes](#pasos-finales-comunes-en-cualquiera-de-las-opciones)**.
+
+> [!TIP]
+> La plantilla viene precargada con todos los archivos del proyecto (`.gs`, `.html` y `appsscript.json`) y en estado completamente limpio: pestañas `Ajustes` y `Auditoría` vacías, sin `CARPETA_TEMP_ID`, sin triggers instalados y sin `ScriptProperties` heredadas.
+
+### Opción B — Extensión *Google Apps Script GitHub Assistant* (Chrome, sin terminal)
+
+Recomendada si prefieres auditar el código directamente en GitHub o mantener tu propio *fork* sin instalar herramientas locales:
+
+1. Haz un ***fork*** de este repositorio en tu cuenta de GitHub.
+2. Instala la extensión **[Google Apps Script GitHub Assistant](https://chromewebstore.google.com/detail/google-apps-script-github/lfjcgcmkmjjlieihflfhjopckgpelofo)** en Google Chrome.
+3. Crea una nueva Google Sheet dentro de una **carpeta privada** del administrador *(p. ej. `Doc2PDF · Control`)*, abre **Extensiones → Apps Script**, entra en **Configuración del proyecto** (icono de engranaje) y marca **«Mostrar el archivo de manifiesto `appsscript.json` en el editor»**.
+4. En el editor de Apps Script, utiliza el icono de la extensión para vincular tu *fork* (rama `main`) y ejecuta **Pull** seleccionando todos los archivos `.gs`, `.html` y `appsscript.json`.
+5. Continúa con los **[Pasos finales comunes](#pasos-finales-comunes-en-cualquiera-de-las-opciones)**.
+
+### Opción C — Despliegue local con `clasp` (desarrolladores y mantenimiento)
 
 1. **Crear la hoja de cálculo de control**
-   - Desde la cuenta administradora o **cuenta funcional del centro** (recomendado, p. ej. `servicios-edtech@tucentro.edu`), crea una Google Sheet nueva dentro de una **carpeta privada** del administrador (por ejemplo, `Doc2PDF · Control`).
+   - Desde la cuenta administradora o **cuenta funcional del centro**, crea una Google Sheet nueva dentro de una **carpeta privada** del administrador *(p. ej. `Doc2PDF · Control`)*.
    - Abre **Extensiones → Apps Script**, ve a **Configuración del proyecto** (icono de engranaje) y copia el **ID del script**.
 
 2. **Clonar, vincular y subir el código con `clasp`**
@@ -151,13 +179,15 @@ La raíz del repositorio coincide con el directorio raíz de `clasp` (`rootDir: 
    clasp push
    ```
 
-3. **Inicializar la hoja y el trigger de mantenimiento**
+### Pasos finales comunes (en cualquiera de las opciones)
+
+1. **Inicializar la hoja y el trigger de mantenimiento**
    - Recarga la hoja de cálculo y espera unos segundos hasta que aparezca el menú **`📄 Doc2PDF`**.
    - Ejecuta **`📄 Doc2PDF → ✨ Inicializar / reparar hoja`** (autoriza los permisos solicitados la primera vez).
    - Ejecuta **`📄 Doc2PDF → 🛠️ Mantenimiento → ⏱️ Trigger diario de mantenimiento`** *(y pulsa **Activar trigger diario** en el diálogo)*.
 
-4. **Desplegar como WebApp en Google Workspace**
-   - En el editor de Apps Script, haz clic en **Implementar → Nueva implementación → Aplicación web**.
+2. **Desplegar como WebApp en Google Workspace**
+   - Abre **Extensiones → Apps Script** y haz clic en **Implementar → Nueva implementación → Aplicación web**.
    - **Ejecutar como:** `Yo` *(la cuenta administradora/funcional propietaria de la hoja)*.
    - **Quién tiene acceso:** `Cualquier usuario de [tu dominio Workspace]`.
    - Copia la URL generada terminada en `/exec`.
@@ -332,6 +362,29 @@ Doc2PDF prioriza un despliegue simple, sin servidores intermedios ni mantenimien
 - **Escalado de `Auditoría` en Google Sheets:** las escrituras se serializan con `LockService` (espera máxima de 15 s) para evitar colisiones, y la hoja de cálculo perderá fluidez si acumula decenas de miles de registros sin purga periódica (`RETENCION_AUDITORIA_DIAS`).
 - **Entorno *iframe* y multicuenta de Google:** las WebApps de Apps Script corren en un *iframe* aislado (`script.google.com`), por lo que sesiones del navegador con múltiples cuentas de Google abiertas a la vez pueden fallar si la cuenta principal del navegador no pertenece al dominio Workspace. Del mismo modo, las cabeceras de seguridad (`CSP` / `X-Frame-Options`) impiden incrustar un PDF nativo mediante `<iframe>` en ciertos navegadores (motivo por el que el visor embebido opcional usa PDF.js sobre `<canvas>` y el modo sin dependencias abre el PDF en una pestaña nueva).
 - **Endpoints de exportación de Docs/Sheets/Slides:** para evitar el límite de 10 MB de `Drive.Files.export`, la exportación utiliza las URLs de `docs.google.com/.../export` autenticadas con el token OAuth del script (`ScriptApp.getOAuthToken()`). Es una vía consolidada en Workspace, pero no forma parte de un contrato REST versionado como Drive API v3 y podría verse afectada si Google cambiara esos endpoints.
+
+---
+
+## Buenas prácticas de desarrollo, verificación y CI/CD
+
+Este proyecto está documentado con vocación abierta para facilitar que docentes, coordinadores TIC y desarrolladores en Google Apps Script puedan **aprender y reutilizar patrones seguros de ingeniería** sin infraestructura compleja:
+
+1. **Suite local en Node.js sin dependencias ([verify_doc2pdf.js](tests/verify_doc2pdf.js))**
+   - Simula los servicios de Google Apps Script en memoria mediante `vm.createContext` y *mocks* ligeros, sin instalar `node_modules` ni depender de cuota de ejecución en la nube.
+   - Ejecutable en un segundo con `node tests/verify_doc2pdf.js`: valida el manifiesto y *scopes*, la sintaxis de todos los `.gs` y bloques `<script>` en `.html`, la lista blanca estricta de funciones públicas sin sufijo `_`, la verificación por `DIALOG_TOKEN`, pruebas frente a intrusión, *Confused Deputy*, *Formula Injection* y fallo cerrado (*Fail-Closed*), además de impedir despliegues accidentales con `DEV_IMPERSONATE_ENABLED_` activo.
+
+2. **Integración continua sin credenciales ([verify.yml](.github/workflows/verify.yml))**
+   - GitHub Actions ejecuta automáticamente `node tests/verify_doc2pdf.js` en cada `push` o *pull request* sobre `main` (o manualmente con `workflow_dispatch`), garantizando que ninguna contribución rompa la sintaxis, los controles de acceso ni las comprobaciones de documentación sin exponer secretos en la nube.
+
+3. **Despliegue local en dos entornos (`dev` vs. plantilla) y `.claspignore`**
+   - **Por qué no usar `~/.clasprc.json` en GitHub Secrets:** el token OAuth de `clasp` concede acceso de escritura sobre todos los proyectos Apps Script de la cuenta y caduca periódicamente. Mantener la sincronización de entornos desde tu equipo local reduce radicalmente la superficie de exposición.
+   - **Sincronización local de doble destino:** `.gitignore` ignora tanto `.clasp.json` como cualquier variante `.clasp.*.json` (por ejemplo, `.clasp.template.json` para actualizar la plantilla pública tras validar en `dev`), conservando únicamente [.clasp.json.example](.clasp.json.example) en el repositorio.
+   - **Lista blanca en [.claspignore](.claspignore):** las reglas `**/**`, `!appsscript.json`, `!*.gs` y `!*.html` aseguran que ni la documentación, ni las capturas, ni los tests ni `.github/` se suban por error a Apps Script.
+
+4. **Higiene en repositorios educativos abiertos**
+   - No confirmes nunca archivos `.clasp.json`, IDs de hojas privadas ni direcciones de correo reales de alumnado o profesorado.
+   - Emplea recursos locales en ASCII (como los emblemas SVG en `assets/badges/`) para evitar enlaces rotos o peticiones externas innecesarias.
+   - Recuerda que **sobrescribir una captura con datos sensibles en un nuevo commit no borra la versión anterior del historial de Git**; cuando ocurra, reescribe la historia afectada antes de publicar o actualiza de forma segura con `git push --force-with-lease`.
 
 ---
 
