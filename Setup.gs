@@ -605,6 +605,16 @@ function apiGetDashboardAnalytics(daysFilter, dialogToken) {
   }
 }
 
+function apiGetAuditJobs(dialogToken) {
+  try {
+    assertAdminDialogCall_(dialogToken, 'apiGetAuditJobs');
+    const data = getAllAuditJobs_();
+    return { success: true, data: data };
+  } catch (e) {
+    return { success: false, code: e.code || 'ADMIN_ERROR', error: e.message };
+  }
+}
+
 function apiPurgeTempFilesFromDialog(arg1, arg2) {
   try {
     const hasTwoArgs = typeof arg2 !== 'undefined';

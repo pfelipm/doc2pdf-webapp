@@ -38,7 +38,8 @@ Microservicio web ligero e interno para **Google Workspace** desarrollado ínteg
 - **Panel administrativo en Google Sheets:**
   - Solo 2 pestañas optimizadas: `Ajustes` (con casillas `SI`/`NO`, desplegables, validaciones numéricas estrictas, ajuste multilínea y autoanchura) y `Auditoría` (filtros activos en todas las columnas y cabecera calibrada).
   - Recorte automático de filas y columnas vacías sobrantes al inicializar o reparar (avisando explícitamente del restablecimiento de `Ajustes` y respetando filas/columnas con datos en `Auditoría`).
-  - Diálogo modal HTML rico **Resumen y analítica** (KPIs, actividad diaria SVG, donut por familias, top extensiones, usuarios activos y últimos trabajos).
+  - Diálogo modal HTML rico **Resumen y analítica** (KPIs, actividad diaria SVG, donut por familias, top extensiones, usuarios activos clicables y tabla reciente con opción para desplegar toda la hoja `Auditoría`, buscar, filtrar por usuario/familia/estado/origen, paginar y exportar a **CSV**).
+  - Modales HTML de mantenimiento con estética unificada: **Trigger diario de mantenimiento** (comprueba estado, activa o desactiva), **Purgar archivos temporales ahora** (huérfanos &gt; 30 min o todos), **Verificar formatos Drive API** (acordeón por familias) y **Verificar listas de acceso y grupos** (resolución en vivo, leyenda `g:`, detección *Fail-Closed* y solapamientos).
   - Modal **Acerca de Doc2PDF** de atribución con banner gráfico WebP embebido en Base64 desde el menú personalizado.
 
 ---
@@ -63,33 +64,37 @@ La raíz del repositorio coincide con el directorio raíz de `clasp` (`rootDir: 
 ```text
 .
 ├── assets/
-│   ├── badges/              # Badges SVG locales del README (cero dependencias externas)
-│   └── banner.jpg           # Banner del repositorio (1376×688, proporción 2:1)
-├── .clasp.json.example      # Plantilla de configuración para clasp (rootDir: ".")
-├── .claspignore             # Excluye documentación, assets y metadatos al hacer clasp push
+│   ├── badges/
+│   │   ├── apps-script.svg      # Badge Google Apps Script V8
+│   │   ├── drive-api.svg        # Badge Drive API v3
+│   │   ├── license.svg          # Badge GNU GPL v3.0
+│   │   └── version.svg          # Badge versión del proyecto
+│   └── banner.jpg               # Banner del repositorio (1376×688, proporción 2:1)
+├── .clasp.json.example          # Plantilla de configuración para clasp (rootDir: ".")
+├── .claspignore                 # Excluye documentación, assets y metadatos al hacer clasp push
 ├── .gitignore
-├── LICENSE                  # GNU GPL v3.0
+├── LICENSE                      # GNU GPL v3.0
 ├── README.md
-├── appsscript.json          # Manifiesto V8, Drive API v3, scopes mínimos y acceso DOMAIN
-├── Config.gs                # Ajustes cacheados, catálogo de formatos, límites y helpers
-├── Setup.gs                 # Menú personalizado, inicialización/recorte de pestañas y diálogos
-├── Auth.gs                  # Identidad Workspace, listas de acceso y cuota diaria
-├── Audit.gs                 # Auditoría concurrente (LockService), filtros, retención y analítica
-├── Cleanup.gs               # Carpeta temporal _Doc2PDF_Temp junto a la hoja y purga segura
-├── Converter.gs             # Motor de conversión (directo, chunked y enlace Drive)
-├── WebApp.gs                # doGet() y endpoints RPC para google.script.run
-├── Index.html               # Estructura de la WebApp (tema claro/oscuro + <dialog>)
-├── Styles.html              # CSS adaptativo con soporte light-dark() y fallbacks
-├── ClientScript.html        # Cola, drag & drop, chunking y vista previa PDF
-├── DashboardDialog.html     # Diálogo modal de Resumen y analítica (SVG nativo)
-├── DialogStyles.html        # Hoja de estilos compartida para diálogos de mantenimiento
-├── AboutDialog.html         # Diálogo modal "Acerca de Doc2PDF" con banner Base64 WebP
-├── InitDialog.html          # Confirmación de reinicialización con aviso de borrado/recorte
-├── AccessCheckDialog.html   # Diagnóstico visual de listas negra/blanca y Google Groups
-├── FormatsCheckDialog.html  # Verificación agrupada de formatos soportados en Drive API v3
-├── TriggerDialog.html       # Estado, activación y desactivación del trigger diario
-├── PurgeTempDialog.html     # Purga selectiva de temporales (huérfanos > 30 min o total)
-└── DeployDialog.html        # Asistente paso a paso para guardar la URL de WebApp
+├── appsscript.json              # Manifiesto V8, Drive API v3, scopes mínimos y acceso DOMAIN
+├── Config.gs                    # Ajustes cacheados, catálogo de formatos, límites y helpers
+├── Setup.gs                     # Menú personalizado, inicialización/recorte de pestañas y diálogos
+├── Auth.gs                      # Identidad Workspace, listas de acceso (usuarios/Google Groups) y cuota diaria
+├── Audit.gs                     # Auditoría concurrente (LockService), retención, analítica y consulta completa
+├── Cleanup.gs                   # Carpeta temporal _Doc2PDF_Temp junto a la hoja y purga segura
+├── Converter.gs                 # Motor de conversión (directo, chunked y enlace Drive)
+├── WebApp.gs                    # doGet() y endpoints RPC para google.script.run
+├── Index.html                   # Estructura de la WebApp (tema claro/oscuro + <dialog>)
+├── Styles.html                  # CSS adaptativo con soporte light-dark() y fallbacks
+├── ClientScript.html            # Cola, drag & drop, chunking y vista previa PDF
+├── DashboardDialog.html         # Resumen y analítica (SVG nativo) + explorador filtrable y CSV de Auditoría
+├── DialogStyles.html            # Hoja de estilos compartida para diálogos de mantenimiento
+├── AboutDialog.html             # Diálogo modal "Acerca de Doc2PDF" con banner Base64 WebP
+├── InitDialog.html              # Confirmación de reinicialización con aviso de borrado/recorte
+├── AccessCheckDialog.html       # Diagnóstico visual de listas negra/blanca, Google Groups y leyenda g:
+├── FormatsCheckDialog.html      # Verificación desplegable por familias de formatos en Drive API v3
+├── TriggerDialog.html           # Estado, activación y desactivación del trigger diario
+├── PurgeTempDialog.html         # Purga selectiva de temporales (huérfanos > 30 min o total)
+└── DeployDialog.html            # Asistente paso a paso para guardar la URL de WebApp
 ```
 
 ---
@@ -112,7 +117,7 @@ La raíz del repositorio coincide con el directorio raíz de `clasp` (`rootDir: 
 3. **Inicializar la hoja y el trigger de mantenimiento**
    - Recarga la hoja de cálculo y espera unos segundos hasta que aparezca el menú **`📄 Doc2PDF`**.
    - Ejecuta **`📄 Doc2PDF → ✨ Inicializar / reparar hoja`** (autoriza los permisos solicitados la primera vez).
-   - Ejecuta **`📄 Doc2PDF → 🛠️ Mantenimiento → ⏱️ Instalar trigger diario de limpieza`**.
+   - Ejecuta **`📄 Doc2PDF → 🛠️ Mantenimiento → ⏱️ Trigger diario de mantenimiento`** *(y pulsa **Activar trigger diario** en el diálogo)*.
 
 4. **Desplegar como WebApp en Google Workspace**
    - En el editor de Apps Script, haz clic en **Implementar → Nueva implementación → Aplicación web**.
@@ -206,47 +211,53 @@ Tanto `LISTA_NEGRA_USUARIOS` como `LISTA_BLANCA_USUARIOS` aceptan indistintament
 El diagrama siguiente resume cómo Doc2PDF aplica **cortocircuito por precedencia**, **resolución directa en memoria sin llamadas a `GroupsApp`** y **caché de 5 minutos en `ScriptCache`** (`GTYPE` / `GMEM`) para minimizar latencia y consumo de cuota incluso con listas mixtas amplias:
 
 ```mermaid
+---
+config:
+  flowchart:
+    wrappingWidth: 360
+    padding: 18
+---
 flowchart TD
-  REQ(["Petición entrante · correo Workspace verificado"]) --> BL_EMPTY
+  REQ(["Petición entrante<br/>correo Workspace"]) --> BL_EMPTY
 
-  subgraph BL["1. LISTA_NEGRA_USUARIOS (máxima prioridad · incluye admins)"]
-    BL_EMPTY{"¿Lista negra vacía?"}
-    BL_DIRECT{"¿Correo literal sin g: coincide en memoria?"}
-    BL_GRP["Evaluar grupos · caché 5 min GTYPE/GMEM y GroupsApp si falta"]
-    BL_BLOCK(["Denegado: USER_BLOCKED · corta sin evaluar lista blanca"])
-    BL_ERR(["Denegado Fail-Closed: BLACKLIST_GROUP_ERROR"])
+  subgraph BL["1. LISTA_NEGRA_USUARIOS (prioridad máxima · admins)"]
+    BL_EMPTY{"¿Lista negra<br/>vacía?"}
+    BL_DIRECT{"¿Correo literal sin g:<br/>coincide en memoria?"}
+    BL_GRP["Evaluar grupos<br/>caché 5 min (GTYPE/GMEM)<br/>y GroupsApp"]
+    BL_BLOCK(["Denegado: USER_BLOCKED<br/>corta lista blanca"])
+    BL_ERR(["Denegado Fail-Closed<br/>BLACKLIST_GROUP_ERROR"])
 
     BL_EMPTY -->|"No"| BL_DIRECT
-    BL_DIRECT -->|"Sí · 0 llamadas GroupsApp"| BL_BLOCK
+    BL_DIRECT -->|"Sí · 0 llamadas<br/>GroupsApp"| BL_BLOCK
     BL_DIRECT -->|"No"| BL_GRP
     BL_GRP -->|"Miembro de grupo"| BL_BLOCK
-    BL_GRP -->|"Error g: o sin permiso de miembros"| BL_ERR
+    BL_GRP -->|"Error g: o sin<br/>permiso miembros"| BL_ERR
   end
 
   BL_EMPTY -->|"Sí"| WL_SKIP
   BL_GRP -->|"Sin coincidencia"| WL_SKIP
 
-  subgraph WL["2. LISTA_BLANCA_USUARIOS (exentos admins de la hoja)"]
-    WL_SKIP{"¿Lista blanca vacía o usuario Admin?"}
-    WL_DIRECT{"¿Correo literal sin g: coincide en memoria?"}
-    WL_GRP["Evaluar grupos · caché 5 min GTYPE/GMEM y GroupsApp si falta"]
-    WL_ERR(["Denegado Fail-Closed: WHITELIST_GROUP_ERROR"])
-    WL_DENY(["Denegado: NOT_IN_WHITELIST"])
+  subgraph WL["2. LISTA_BLANCA_USUARIOS (exentos admins)"]
+    WL_SKIP{"¿Lista blanca vacía<br/>o usuario Admin?"}
+    WL_DIRECT{"¿Correo literal sin g:<br/>coincide en memoria?"}
+    WL_GRP["Evaluar grupos<br/>caché 5 min (GTYPE/GMEM)<br/>y GroupsApp"]
+    WL_ERR(["Denegado Fail-Closed<br/>WHITELIST_GROUP_ERROR"])
+    WL_DENY(["Denegado<br/>NOT_IN_WHITELIST"])
 
     WL_SKIP -->|"No"| WL_DIRECT
     WL_DIRECT -->|"No"| WL_GRP
-    WL_GRP -->|"Error g: o sin permiso de miembros"| WL_ERR
+    WL_GRP -->|"Error g: o sin<br/>permiso miembros"| WL_ERR
     WL_GRP -->|"Sin coincidencia"| WL_DENY
   end
 
-  WL_SKIP -->|"Sí · 0 llamadas GroupsApp"| DOM_CHK
-  WL_DIRECT -->|"Sí · 0 llamadas GroupsApp"| DOM_CHK
+  WL_SKIP -->|"Sí · 0 llamadas<br/>GroupsApp"| DOM_CHK
+  WL_DIRECT -->|"Sí · 0 llamadas<br/>GroupsApp"| DOM_CHK
   WL_GRP -->|"Miembro de grupo"| DOM_CHK
 
-  subgraph DOM["3. DOMINIOS_PERMITIDOS (exentos admins de la hoja)"]
-    DOM_CHK{"¿Admin o dominio autorizado?"}
-    ALLOW_OK(["Acceso autorizado · pasa a cuota diaria"])
-    DOM_DENY(["Denegado: DOMAIN_NOT_ALLOWED"])
+  subgraph DOM["3. DOMINIOS_PERMITIDOS (exentos admins)"]
+    DOM_CHK{"¿Admin o dominio<br/>autorizado?"}
+    ALLOW_OK(["Acceso autorizado<br/>pasa a cuota diaria"])
+    DOM_DENY(["Denegado<br/>DOMAIN_NOT_ALLOWED"])
 
     DOM_CHK -->|"Sí"| ALLOW_OK
     DOM_CHK -->|"No"| DOM_DENY

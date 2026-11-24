@@ -112,6 +112,31 @@
           <? } ?>
         </section>
       <? } ?>
+
+      <section class="list-card" aria-labelledby="legendHeading">
+        <div class="list-head">
+          <h2 id="legendHeading">Leyenda de prefijos y estados</h2>
+          <span class="list-sub">Cómo interpretar cada entrada</span>
+        </div>
+        <ul class="legend-list" role="list">
+          <li class="legend-item">
+            <span class="legend-code">g:grupo@dominio</span>
+            <span>
+              <strong>Modo estricto (<em>Fail-Closed</em>)</strong> <em>(también admite <code>grupo:</code>)</em>.
+              Exige que la dirección exista y sea legible como Google Group; si falla o no permite consultar miembros,
+              deniega el acceso preventivamente (<code>Error g:</code> o <code>Sin permisos</code>).
+            </span>
+          </li>
+          <li class="legend-item">
+            <span class="legend-code">correo@dominio</span>
+            <span>
+              <strong>Autodetección (sin prefijo)</strong>. Si existe como Google Group accesible se evalúa como grupo
+              (<code>Grupo OK</code>); si no existe como grupo se evalúa como cuenta individual (<code>Usuario</code>);
+              si existe como grupo pero oculta sus miembros, bloquea (<em>Fail-Closed</em>, <code>Sin permisos</code>).
+            </span>
+          </li>
+        </ul>
+      </section>
     </main>
 
     <footer class="footer-bar">

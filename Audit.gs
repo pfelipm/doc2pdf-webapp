@@ -372,6 +372,78 @@ function formatTimestampDisplay_(dateObj) {
 }
 
 /**
+ * Formatea una marca temporal completa (dd/MM/yyyy HH:mm) en zona local para el explorador.
+ */
+function formatTimestampFull_(dateObj) {
+  if (typeof Utilities !== 'undefined' && Utilities.formatDate) {
+    return Utilities.formatDate(dateObj, getLocalTimeZone_(), 'dd/MM/yyyy HH:mm');
+  }
+  const dd = String(dateObj.getDate()).padStart(2, '0');
+  const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const yyyy = String(dateObj.getFullYear());
+  const hh = String(dateObj.getHours()).padStart(2, '0');
+  const min = String(dateObj.getMinutes()).padStart(2, '0');
+  return dd + '/' + mm + '/' + yyyy + ' ' + hh + ':' + min;
+}
+
+/**
+ * Parsea una fila cruda de la hoja Auditoría en una estructura normalizada.
+ * @param {Array} r Fila de datos.
+ * @param {number} rowIndex Índice original en el bloque leído.
+ * @return {?Object}
+ */
+function parseAuditRow_(r, rowIndex) {
+  if (!r || r.length < 11) return null;
+  const rawTs = r[0];
+  if (!rawTs) return null;
+  const tsDate = rawTs instanceof Date ? rawTs : new Date(rawTs);
+  const tsMs = tsDate.getTime();
+  if (isNaN(tsMs)) return null;
+
+  return {
+    tsDate: tsDate,
+    tsMs: tsMs,
+    isoDay: formatIsoDay_(tsDate),
+    jobId: String(r[1] || ''),
+    user: String(r[2] || 'usuario-dominio').trim(),
+    origin: String(r[3] || 'Local').trim(),
+    file: String(r[4] || '').replace(/\u200B/g, ''),
+    ext: String(r[5] || '').trim().toLowerCase(),
+    family: String(r[6] || '').trim().toUpperCase(),
+    inputKB: Number(r[7]) || 0,
+    pdfKB: Number(r[8]) || 0,
+    durationMs: Number(r[9]) || 0,
+    status: String(r[10] || '').trim().toUpperCase(),
+    detail: String(r[11] || ''),
+    _idx: typeof rowIndex === 'number' ? rowIndex : 0
+  };
+}
+
+/**
+ * Serializa un registro de auditoría parseado para envío al cliente HTML.
+ * @param {Object} job
+ * @return {Object}
+ */
+function serializeAuditJob_(job) {
+  return {
+    timestamp: formatTimestampDisplay_(job.tsDate),
+    timestampFull: formatTimestampFull_(job.tsDate),
+    tsMs: job.tsMs,
+    jobId: job.jobId,
+    user: job.user,
+    origin: job.origin,
+    file: job.file,
+    ext: job.ext,
+    family: job.family,
+    inputKB: job.inputKB,
+    pdfKB: job.pdfKB,
+    durationMs: job.durationMs,
+    status: job.status,
+    detail: job.detail
+  };
+}
+
+/**
  * Lógica pura de agregación analítica sobre las filas de Auditoría para el Dashboard.
  * @param {Array<Array>} rows Filas de datos (sin cabecera).
  * @param {number} daysFilter 7, 30, 90 o 0 (todo el histórico).
@@ -412,45 +484,10 @@ function computeDashboardAnalytics_(rows, daysFilter, nowDate, healthEstado) {
   const parsedRows = [];
 
   for (let i = 0; i < sourceRows.length; i++) {
-    const r = sourceRows[i];
-    if (!r || r.length < 11) continue;
-    const rawTs = r[0];
-    if (!rawTs) continue;
-    const tsDate = rawTs instanceof Date ? rawTs : new Date(rawTs);
-    const tsMs = tsDate.getTime();
-    if (isNaN(tsMs)) continue;
-
-    if (cutoffMs > 0 && tsMs < cutoffMs) continue;
-
-    const status = String(r[10] || '').trim().toUpperCase();
-    const user = String(r[2] || 'usuario-dominio').trim();
-    const originRaw = String(r[3] || 'Local').trim();
-    const file = String(r[4] || '').replace(/\u200B/g, '');
-    const ext = String(r[5] || '').trim().toLowerCase();
-    const familyRaw = String(r[6] || '').trim().toUpperCase();
-    const inputKB = Number(r[7]) || 0;
-    const pdfKB = Number(r[8]) || 0;
-    const durationMs = Number(r[9]) || 0;
-    const detail = String(r[11] || '');
-    const jobId = String(r[1] || '');
-    const isoDay = formatIsoDay_(tsDate);
-
-    parsedRows.push({
-      tsDate: tsDate,
-      tsMs: tsMs,
-      isoDay: isoDay,
-      jobId: jobId,
-      user: user,
-      origin: originRaw,
-      file: file,
-      ext: ext,
-      family: familyRaw,
-      inputKB: inputKB,
-      pdfKB: pdfKB,
-      durationMs: durationMs,
-      status: status,
-      detail: detail
-    });
+    const parsed = parseAuditRow_(sourceRows[i], i);
+    if (!parsed) continue;
+    if (cutoffMs > 0 && parsed.tsMs < cutoffMs) continue;
+    parsedRows.push(parsed);
   }
 
   for (let i = 0; i < parsedRows.length; i++) {
@@ -634,25 +671,11 @@ function computeDashboardAnalytics_(rows, daysFilter, nowDate, healthEstado) {
   // Últimos 20 trabajos ordenados del más reciente al más antiguo
   const sortedRecent = parsedRows
     .slice()
-    .sort(function (a, b) { return b.tsMs - a.tsMs; })
+    .sort(function (a, b) { return (b.tsMs - a.tsMs) || (b._idx - a._idx); })
     .slice(0, 20);
 
   for (let i = 0; i < sortedRecent.length; i++) {
-    const job = sortedRecent[i];
-    recentJobs.push({
-      timestamp: formatTimestampDisplay_(job.tsDate),
-      jobId: job.jobId,
-      user: job.user,
-      origin: job.origin,
-      file: job.file,
-      ext: job.ext,
-      family: job.family,
-      inputKB: job.inputKB,
-      pdfKB: job.pdfKB,
-      durationMs: job.durationMs,
-      status: job.status,
-      detail: job.detail
-    });
+    recentJobs.push(serializeAuditJob_(sortedRecent[i]));
   }
 
   return {
@@ -682,21 +705,71 @@ function computeDashboardAnalytics_(rows, daysFilter, nowDate, healthEstado) {
 }
 
 /**
- * Lee Auditoría, obtiene el estado del sistema y devuelve la analítica para el Dashboard.
- * @param {number=} daysFilter 7, 30, 90 o 0 (todo).
- * @return {Object}
+ * Lee las filas de datos de la pestaña Auditoría.
+ * @return {{rows: Array<Array>, totalAuditRows: number}}
  */
-function getDashboardAnalytics_(daysFilter) {
-  const cfg = getConfig_(true);
+function readAuditSheetRows_() {
   const ss = getSpreadsheet_();
   const sheet = ss ? ss.getSheetByName(SHEET_AUDIT_NAME) : null;
-
   let rows = [];
   let totalAuditRows = 0;
   if (sheet && sheet.getLastRow() >= 2) {
     totalAuditRows = sheet.getLastRow() - 1;
     rows = sheet.getRange(2, 1, totalAuditRows, AUDIT_HEADERS.length).getValues();
   }
+  return { rows: rows, totalAuditRows: totalAuditRows };
+}
+
+/**
+ * Extrae y serializa todas las filas válidas de Auditoría (sin filtro temporal),
+ * ordenadas de más reciente a más antigua.
+ * @param {Array<Array>} rows
+ * @param {Date=} nowDate
+ * @return {{jobs: Array<Object>, totalRows: number, generatedAt: string}}
+ */
+function extractAllAuditJobs_(rows, nowDate) {
+  const now = nowDate || new Date();
+  const sourceRows = Array.isArray(rows) ? rows : [];
+  const parsedRows = [];
+
+  for (let i = 0; i < sourceRows.length; i++) {
+    const parsed = parseAuditRow_(sourceRows[i], i);
+    if (parsed) parsedRows.push(parsed);
+  }
+
+  parsedRows.sort(function (a, b) {
+    return (b.tsMs - a.tsMs) || (b._idx - a._idx);
+  });
+
+  const serialized = [];
+  for (let i = 0; i < parsedRows.length; i++) {
+    serialized.push(serializeAuditJob_(parsedRows[i]));
+  }
+
+  return {
+    jobs: serialized,
+    totalRows: serialized.length,
+    generatedAt: formatTimestampDisplay_(now)
+  };
+}
+
+/**
+ * Devuelve todos los trabajos registrados en la hoja Auditoría (bajo demanda).
+ * @return {{jobs: Array<Object>, totalRows: number, generatedAt: string}}
+ */
+function getAllAuditJobs_() {
+  const auditData = readAuditSheetRows_();
+  return extractAllAuditJobs_(auditData.rows, new Date());
+}
+
+/**
+ * Lee Auditoría, obtiene el estado del sistema y devuelve la analítica para el Dashboard.
+ * @param {number=} daysFilter 7, 30, 90 o 0 (todo).
+ * @return {Object}
+ */
+function getDashboardAnalytics_(daysFilter) {
+  const cfg = getConfig_(true);
+  const auditData = readAuditSheetRows_();
 
   const health = {
     serviceActive: cfg.SERVICIO_ACTIVO,
@@ -706,10 +779,10 @@ function getDashboardAnalytics_(daysFilter) {
     dailyLimit: cfg.LIMITE_DIARIO_USUARIO,
     auditNameMode: cfg.REGISTRAR_NOMBRE_ARCHIVO,
     webAppConfigured: Boolean(getSavedWebAppUrl_()),
-    totalAuditRows: totalAuditRows
+    totalAuditRows: auditData.totalAuditRows
   };
 
   const parsedFilter = typeof daysFilter === 'number' ? daysFilter : parseInt(daysFilter, 10);
   const safeFilter = [0, 7, 30, 90].indexOf(parsedFilter) !== -1 ? parsedFilter : 30;
-  return computeDashboardAnalytics_(rows, safeFilter, new Date(), health);
+  return computeDashboardAnalytics_(auditData.rows, safeFilter, new Date(), health);
 }

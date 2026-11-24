@@ -58,14 +58,28 @@
         </div>
       <? } ?>
 
+      <h2 class="section-heading">Detalle por familia (haz clic para desplegar)</h2>
+
       <? for (let f = 0; f < families.length; f++) {
            const fam = families[f];
-           if (!fam.items || fam.items.length === 0) continue; ?>
-        <section class="list-card">
-          <div class="list-head">
-            <h2><?= fam.label ?> (<?= fam.verified ?>/<?= fam.items.length ?>)</h2>
-            <span class="list-sub"><?= fam.verified === fam.items.length ? 'Completa' : 'Revisar avisos' ?></span>
-          </div>
+           if (!fam.items || fam.items.length === 0) continue;
+           const hasWarnings = fam.verified < fam.items.length;
+           const extPreview = fam.items.map(function (it) { return '.' + it.ext; }).join(', '); ?>
+        <details class="list-card details-card"<?= hasWarnings ? ' open' : '' ?>>
+          <summary class="list-head details-summary">
+            <span class="list-head-left">
+              <span class="list-title"><?= fam.label ?> (<?= fam.verified ?>/<?= fam.items.length ?>)</span>
+              <span class="list-sub"><?= extPreview ?></span>
+            </span>
+            <span class="list-meta">
+              <span class="status-badge <?= hasWarnings ? 'badge-warn' : 'badge-ok' ?>">
+                <?= hasWarnings ? 'Revisar avisos' : 'Completa' ?>
+              </span>
+              <svg class="details-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </span>
+          </summary>
           <ul class="entry-list" role="list">
             <? for (let i = 0; i < fam.items.length; i++) {
                  const item = fam.items[i]; ?>
@@ -82,7 +96,7 @@
               </li>
             <? } ?>
           </ul>
-        </section>
+        </details>
       <? } ?>
     </main>
 
