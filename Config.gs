@@ -79,8 +79,8 @@ const DEFAULT_CONFIG_DEFS = [
   ['SERVICIO_ACTIVO', 'SI', 'Activa (marcada) o pausa en modo mantenimiento (desmarcada) el conversor', 'checkbox'],
   ['MENSAJE_MANTENIMIENTO', 'El servicio se encuentra temporalmente en mantenimiento. Inténtalo de nuevo más tarde.', 'Mensaje mostrado cuando SERVICIO_ACTIVO está desmarcado', 'text'],
   ['DOMINIOS_PERMITIDOS', '', 'Dominios Workspace separados por comas (vacío = mismo dominio que la cuenta ejecutora)', 'text'],
-  ['LISTA_BLANCA_USUARIOS', '', 'Opcional: correos autorizados separados por comas (vacío = todo el dominio)', 'text'],
-  ['LISTA_NEGRA_USUARIOS', '', 'Opcional: correos bloqueados separados por comas', 'text'],
+  ['LISTA_NEGRA_USUARIOS', '', 'Opcional (se evalúa primero y prevalece sobre lista blanca): correos de usuario o Google Groups separados por comas. Usa g:grupo@dominio para exigir verificación estricta.', 'text'],
+  ['LISTA_BLANCA_USUARIOS', '', 'Opcional (vacío = todo el dominio): correos de usuario o Google Groups autorizados separados por comas (exentos admins de la hoja). Usa g:grupo@dominio para exigir verificación estricta.', 'text'],
   ['LIMITE_DIARIO_USUARIO', 30, 'Máximo de conversiones al día por usuario (0 = sin límite)', 'number'],
   ['TAMANO_MAX_MB', 20, 'Tamaño máximo permitido por archivo en MB (rango seguro: 1 a 45)', 'number'],
   ['MAX_ARCHIVOS_LOTE', 5, 'Máximo de archivos admitidos por lote al arrastrar o seleccionar (1 a 20)', 'number'],
@@ -373,6 +373,33 @@ function parseListSetting_(val, toUpper) {
 }
 
 /**
+ * Normaliza una lista de control de acceso (correos de usuario y/o Google Groups).
+ * Colapsa espacios tras los prefijos `g:` o `grupo:` (p. ej. `g: grupo@dom` -> `g:grupo@dom`)
+ * antes de tokenizar y deduplica entradas conservando el orden.
+ * @param {string} val
+ * @return {Array<string>}
+ */
+function parseAccessListSetting_(val) {
+  if (!val) return [];
+  const collapsed = String(val).replace(/(^|[,;\s\n])(?:g|grupo)\s*:\s*/gi, '$1g:');
+  const rawTokens = collapsed.split(/[,;\s\n]+/);
+  const seen = {};
+  const result = [];
+
+  for (let i = 0; i < rawTokens.length; i++) {
+    const cleaned = rawTokens[i].trim().toLowerCase();
+    if (!cleaned) continue;
+    const normalized = cleaned.indexOf('grupo:') === 0
+      ? 'g:' + cleaned.slice(6).trim()
+      : cleaned;
+    if (!normalized || normalized === 'g:' || seen[normalized]) continue;
+    seen[normalized] = true;
+    result.push(normalized);
+  }
+  return result;
+}
+
+/**
  * Construye el mapa base con valores por defecto sin leer de la hoja.
  */
 function buildDefaultRawConfig_() {
@@ -414,8 +441,8 @@ function normalizeConfigObject_(rawInput) {
     SERVICIO_ACTIVO: parseBoolean_(raw.SERVICIO_ACTIVO, true),
     MENSAJE_MANTENIMIENTO: String(raw.MENSAJE_MANTENIMIENTO || defaults.MENSAJE_MANTENIMIENTO).trim().slice(0, 300),
     DOMINIOS_PERMITIDOS: parseListSetting_(raw.DOMINIOS_PERMITIDOS, false),
-    LISTA_BLANCA_USUARIOS: parseListSetting_(raw.LISTA_BLANCA_USUARIOS, false),
-    LISTA_NEGRA_USUARIOS: parseListSetting_(raw.LISTA_NEGRA_USUARIOS, false),
+    LISTA_BLANCA_USUARIOS: parseAccessListSetting_(raw.LISTA_BLANCA_USUARIOS),
+    LISTA_NEGRA_USUARIOS: parseAccessListSetting_(raw.LISTA_NEGRA_USUARIOS),
     LIMITE_DIARIO_USUARIO: parseIntClamped_(
       raw.LIMITE_DIARIO_USUARIO,
       30,
@@ -507,6 +534,12 @@ function clearConfigCache_() {
     const cache = CacheService.getScriptCache();
     if (cache) {
       cache.remove(CONFIG_CACHE_KEY);
+      if (typeof ADMIN_LIST_CACHE_KEY_ !== 'undefined') {
+        cache.remove(ADMIN_LIST_CACHE_KEY_);
+      }
+    }
+    if (typeof bumpGroupCacheEpoch_ === 'function') {
+      bumpGroupCacheEpoch_();
     }
   } catch (e) {
     console.warn('Error limpiando caché de ajustes:', e.message);

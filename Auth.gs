@@ -7,6 +7,8 @@
 const ADMIN_LIST_CACHE_KEY_ = 'DOC2PDF_ADMINS_V1';
 const DIALOG_TOKEN_TTL_SEC_ = 1800;
 const QUOTA_CACHE_TTL_SEC_ = 21600; // Máximo permitido por CacheService.put() en Apps Script (6 horas)
+const GROUP_CACHE_TTL_SEC_ = 300; // 5 min, coherente con CONFIG_CACHE_TTL_SEC_
+const GROUP_CACHE_EPOCH_KEY_ = 'DOC2PDF_GRP_EPOCH_V1';
 
 // SOLO DESARROLLO / QA: deben permanecer desactivadas en producción y Git.
 // Solo surten efecto cuando el usuario real es la cuenta desplegadora (real === effective).
@@ -67,6 +69,335 @@ function resolveEffectiveIdentity_(realEmail, effectiveEmail, overrideOpt) {
     realEmail: cleanReal,
     isImpersonating: false,
     auditEmail: cleanReal
+  };
+}
+
+/**
+ * Obtiene la época actual de invalidación para la caché de Google Groups.
+ * @return {string}
+ */
+function getGroupCacheEpoch_() {
+  try {
+    const cache = CacheService.getScriptCache();
+    if (!cache) return '0';
+    return cache.get(GROUP_CACHE_EPOCH_KEY_) || '0';
+  } catch (e) {
+    return '0';
+  }
+}
+
+/**
+ * Incrementa la época de caché de Google Groups para invalidar entradas previas al instante.
+ */
+function bumpGroupCacheEpoch_() {
+  try {
+    const cache = CacheService.getScriptCache();
+    if (!cache) return;
+    const prev = Number(cache.get(GROUP_CACHE_EPOCH_KEY_) || '0');
+    const now = Date.now();
+    const next = String(now > prev ? now : prev + 1);
+    cache.put(GROUP_CACHE_EPOCH_KEY_, next, 21600);
+  } catch (e) {
+    // No bloquear si CacheService no está disponible
+  }
+}
+
+/**
+ * Descompone una entrada normalizada de lista blanca o negra en email y bandera estricta `g:`.
+ * @param {string} rawEntry
+ * @return {{email: string, explicitGroup: boolean, raw: string}}
+ */
+function parseAccessEntry_(rawEntry) {
+  const cleaned = String(rawEntry || '').trim().toLowerCase();
+  if (!cleaned) {
+    return { email: '', explicitGroup: false, raw: '' };
+  }
+  if (cleaned.indexOf('grupo:') === 0) {
+    return {
+      email: cleaned.slice(6).trim(),
+      explicitGroup: true,
+      raw: 'g:' + cleaned.slice(6).trim()
+    };
+  }
+  if (cleaned.indexOf('g:') === 0) {
+    return {
+      email: cleaned.slice(2).trim(),
+      explicitGroup: true,
+      raw: cleaned
+    };
+  }
+  return {
+    email: cleaned,
+    explicitGroup: false,
+    raw: cleaned
+  };
+}
+
+/**
+ * Comprueba membresía directa de `userEmail` en un posible Google Group usando GroupsApp + ScriptCache (5 min).
+ * Sigue política Fail-Closed ante errores en grupos explícitos (`g:`) o al consultar miembros sin permiso.
+ * @param {string} userEmail
+ * @param {{email: string, explicitGroup: boolean, raw: string}} parsedEntry
+ * @param {string=} epochOpt
+ * @return {{status: string, cached?: boolean, error?: string}}
+ */
+function checkUserInGroupEntry_(userEmail, parsedEntry, epochOpt) {
+  const groupEmail = String((parsedEntry && parsedEntry.email) || '').trim().toLowerCase();
+  const cleanUser = String(userEmail || '').trim().toLowerCase();
+  if (!groupEmail || !cleanUser) {
+    return { status: 'NOT_GROUP' };
+  }
+
+  let cache = null;
+  try {
+    cache = CacheService.getScriptCache();
+  } catch (e) {
+    cache = null;
+  }
+
+  const epoch = epochOpt || getGroupCacheEpoch_();
+  const typeKey = 'DOC2PDF_GTYPE_' + epoch + '_' + shortSha256_(groupEmail);
+  const memKey = 'DOC2PDF_GMEM_' + epoch + '_' + shortSha256_(groupEmail + '|' + cleanUser);
+
+  if (cache) {
+    try {
+      const memVal = cache.get(memKey);
+      if (memVal === '1') {
+        return { status: 'MEMBER', cached: true };
+      }
+      if (memVal === '0') {
+        return { status: 'NON_MEMBER', cached: true };
+      }
+      if (!parsedEntry.explicitGroup && cache.get(typeKey) === 'NOT_GROUP') {
+        return { status: 'NOT_GROUP', cached: true };
+      }
+    } catch (e) {
+      // Continuar con evaluación en vivo si la lectura de caché falla
+    }
+  }
+
+  if (typeof GroupsApp === 'undefined' || !GroupsApp) {
+    if (parsedEntry.explicitGroup) {
+      return { status: 'ERROR', error: 'El servicio GroupsApp no está disponible.' };
+    }
+    return { status: 'NOT_GROUP' };
+  }
+
+  let group = null;
+  try {
+    group = GroupsApp.getGroupByEmail(groupEmail);
+    if (!group) {
+      throw new Error('Grupo no encontrado o inaccesible: ' + groupEmail);
+    }
+    if (cache) {
+      try {
+        cache.put(typeKey, 'GROUP', GROUP_CACHE_TTL_SEC_);
+      } catch (e) {}
+    }
+  } catch (e) {
+    if (!parsedEntry.explicitGroup) {
+      if (cache) {
+        try {
+          cache.put(typeKey, 'NOT_GROUP', GROUP_CACHE_TTL_SEC_);
+        } catch (cacheErr) {}
+      }
+      return { status: 'NOT_GROUP', error: e && e.message ? e.message : String(e) };
+    }
+    return {
+      status: 'ERROR',
+      error: e && e.message ? e.message : String(e)
+    };
+  }
+
+  try {
+    const isMember = Boolean(group.hasUser(cleanUser));
+    if (cache) {
+      try {
+        cache.put(memKey, isMember ? '1' : '0', GROUP_CACHE_TTL_SEC_);
+      } catch (cacheErr) {}
+    }
+    return { status: isMember ? 'MEMBER' : 'NON_MEMBER' };
+  } catch (e) {
+    // Grupo accesible pero lista de miembros restringida para la cuenta desplegadora -> Fail-Closed
+    return {
+      status: 'ERROR',
+      error: e && e.message ? e.message : String(e)
+    };
+  }
+}
+
+/**
+ * Evalúa si `userEmail` coincide con alguna entrada de una lista de acceso (usuario directo o grupo Google).
+ * @param {string} userEmail
+ * @param {Array<string>} entries
+ * @return {{matched: boolean, matchType: ?string, matchedEntry: ?string, errorEntry: ?string, errorMessage: string}}
+ */
+function evaluateAccessListMatch_(userEmail, entries) {
+  const cleanUser = String(userEmail || '').trim().toLowerCase();
+  const list = Array.isArray(entries) ? entries : [];
+  if (!cleanUser || list.length === 0) {
+    return {
+      matched: false,
+      matchType: null,
+      matchedEntry: null,
+      errorEntry: null,
+      errorMessage: ''
+    };
+  }
+
+  const parsedEntries = [];
+  for (let i = 0; i < list.length; i++) {
+    const parsed = parseAccessEntry_(list[i]);
+    if (!parsed.email) continue;
+    if (!parsed.explicitGroup && parsed.email === cleanUser) {
+      return {
+        matched: true,
+        matchType: 'DIRECT',
+        matchedEntry: parsed.raw,
+        errorEntry: null,
+        errorMessage: ''
+      };
+    }
+    parsedEntries.push(parsed);
+  }
+
+  const epoch = getGroupCacheEpoch_();
+  let firstError = null;
+  for (let i = 0; i < parsedEntries.length; i++) {
+    const entry = parsedEntries[i];
+    const check = checkUserInGroupEntry_(cleanUser, entry, epoch);
+    if (check.status === 'MEMBER') {
+      return {
+        matched: true,
+        matchType: 'GROUP',
+        matchedEntry: entry.raw,
+        errorEntry: null,
+        errorMessage: ''
+      };
+    }
+    if (check.status === 'ERROR' && !firstError) {
+      firstError = {
+        entry: entry.raw || entry.email,
+        message: check.error || 'Error al consultar Google Group'
+      };
+    }
+  }
+
+  return {
+    matched: false,
+    matchType: null,
+    matchedEntry: null,
+    errorEntry: firstError ? firstError.entry : null,
+    errorMessage: firstError ? firstError.message : ''
+  };
+}
+
+/**
+ * Inspecciona en vivo las entradas de una lista de acceso para diagnóstico en Sheets.
+ * @param {Array<string>} entries
+ * @param {string} probeEmail
+ * @return {Array<{raw: string, email: string, explicitGroup: boolean, kind: string, detail: string}>}
+ */
+function inspectAccessListEntries_(entries, probeEmail) {
+  const list = Array.isArray(entries) ? entries : [];
+  const effectiveProbe = String(probeEmail || '').trim().toLowerCase() || 'doc2pdf-probe@invalid.local';
+  const results = [];
+
+  for (let i = 0; i < list.length; i++) {
+    const parsed = parseAccessEntry_(list[i]);
+    if (!parsed.email) continue;
+
+    try {
+      if (typeof GroupsApp === 'undefined' || !GroupsApp) {
+        throw new Error('Servicio GroupsApp no disponible.');
+      }
+      const group = GroupsApp.getGroupByEmail(parsed.email);
+      if (!group) {
+        throw new Error('El grupo no existe o no es visible.');
+      }
+      try {
+        group.hasUser(effectiveProbe);
+        results.push({
+          raw: parsed.raw,
+          email: parsed.email,
+          explicitGroup: parsed.explicitGroup,
+          kind: 'GROUP_OK',
+          detail: parsed.explicitGroup
+            ? 'Google Group válido (modo estricto g:)'
+            : 'Google Group válido (autodetectado)'
+        });
+      } catch (permErr) {
+        results.push({
+          raw: parsed.raw,
+          email: parsed.email,
+          explicitGroup: parsed.explicitGroup,
+          kind: 'GROUP_PERMISSION_ERROR',
+          detail: 'Grupo encontrado pero sin permiso de lectura de miembros: ' +
+            (permErr && permErr.message ? permErr.message : String(permErr))
+        });
+      }
+    } catch (lookupErr) {
+      results.push({
+        raw: parsed.raw,
+        email: parsed.email,
+        explicitGroup: parsed.explicitGroup,
+        kind: parsed.explicitGroup ? 'EXPLICIT_GROUP_ERROR' : 'USER_OR_UNAVAILABLE',
+        detail: parsed.explicitGroup
+          ? 'Error Fail-Closed en grupo explícito: ' + (lookupErr && lookupErr.message ? lookupErr.message : String(lookupErr))
+          : 'No resuelto como grupo (se evaluará como cuenta individual)'
+      });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Ejecuta un diagnóstico completo de `LISTA_NEGRA_USUARIOS` y `LISTA_BLANCA_USUARIOS`,
+ * verificando resolución de Google Groups, permisos de consulta de miembros y solapamientos.
+ * @param {Object=} configOpt
+ * @return {{blacklist: Array<Object>, whitelist: Array<Object>, overlaps: Array<string>, errors: number}}
+ */
+function inspectAccessLists_(configOpt) {
+  const cfg = configOpt || getConfig_(true);
+  let probeEmail = '';
+  try {
+    probeEmail = (Session.getEffectiveUser().getEmail() || getRealActiveEmail_() || '').trim().toLowerCase();
+  } catch (e) {
+    probeEmail = getRealActiveEmail_();
+  }
+
+  const blacklist = inspectAccessListEntries_(cfg.LISTA_NEGRA_USUARIOS || [], probeEmail);
+  const whitelist = inspectAccessListEntries_(cfg.LISTA_BLANCA_USUARIOS || [], probeEmail);
+
+  const blEmails = {};
+  for (let i = 0; i < blacklist.length; i++) {
+    blEmails[blacklist[i].email] = true;
+  }
+
+  const overlapSeen = {};
+  const overlaps = [];
+  for (let i = 0; i < whitelist.length; i++) {
+    const email = whitelist[i].email;
+    if (blEmails[email] && !overlapSeen[email]) {
+      overlapSeen[email] = true;
+      overlaps.push(email);
+    }
+  }
+
+  let errors = 0;
+  const all = blacklist.concat(whitelist);
+  for (let i = 0; i < all.length; i++) {
+    if (all[i].kind === 'GROUP_PERMISSION_ERROR' || all[i].kind === 'EXPLICIT_GROUP_ERROR') {
+      errors++;
+    }
+  }
+
+  return {
+    blacklist: blacklist,
+    whitelist: whitelist,
+    overlaps: overlaps,
+    errors: errors
   };
 }
 
@@ -394,16 +725,34 @@ function getUserContext_(config, impersonationOverrideOpt) {
   const whitelist = cfg.LISTA_BLANCA_USUARIOS || [];
   const blacklist = cfg.LISTA_NEGRA_USUARIOS || [];
 
-  if (blacklist.indexOf(activeEmail) !== -1) {
+  const blEval = blacklist.length > 0
+    ? evaluateAccessListMatch_(activeEmail, blacklist)
+    : { matched: false, errorEntry: null, errorMessage: '' };
+
+  if (blEval.matched) {
     baseContext.code = 'USER_BLOCKED';
     baseContext.reason = 'Tu cuenta no tiene acceso habilitado a este servicio. Contacta con administración.';
     return baseContext;
   }
 
-  if (whitelist.length > 0 && !isAdmin && whitelist.indexOf(activeEmail) === -1) {
-    baseContext.code = 'NOT_IN_WHITELIST';
-    baseContext.reason = 'El acceso está restringido a cuentas autorizadas del centro.';
+  if (blEval.errorEntry) {
+    baseContext.code = 'BLACKLIST_GROUP_ERROR';
+    baseContext.reason = 'No se ha podido verificar la lista negra de acceso (' + blEval.errorEntry + '). Contacta con administración.';
     return baseContext;
+  }
+
+  if (whitelist.length > 0 && !isAdmin) {
+    const wlEval = evaluateAccessListMatch_(activeEmail, whitelist);
+    if (wlEval.errorEntry && !wlEval.matched) {
+      baseContext.code = 'WHITELIST_GROUP_ERROR';
+      baseContext.reason = 'No se ha podido verificar un grupo autorizado en la lista blanca (' + wlEval.errorEntry + '). Contacta con administración.';
+      return baseContext;
+    }
+    if (!wlEval.matched) {
+      baseContext.code = 'NOT_IN_WHITELIST';
+      baseContext.reason = 'El acceso está restringido a cuentas autorizadas del centro.';
+      return baseContext;
+    }
   }
 
   const userDomain = baseContext.domain;

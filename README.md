@@ -26,6 +26,7 @@ Microservicio web ligero e interno para **Google Workspace** desarrollado ínteg
   - Descarga fragmentada automática cuando el PDF resultante supera `7 MB`.
 - **Privacidad, control y cumplimiento RGPD:**
   - Modelo **Opción A**: ejecutado como administrador / cuenta funcional del centro (`executeAs: "USER_DEPLOYING"`) y restringido al dominio Workspace (`access: "DOMAIN"`). La Google Sheet de control permanece **100 % privada**.
+  - Control de acceso flexible mediante listas mixtas de **cuentas individuales y Google Groups** (`LISTA_NEGRA_USUARIOS` y `LISTA_BLANCA_USUARIOS`), con autohibridación o prefijo estricto `g:grupo@dominio` y precedencia de denegación (*deny overrides allow*).
   - Carpeta temporal dedicada `_Doc2PDF_Temp` creada automáticamente dentro de la carpeta donde reside la Google Sheet (con salvaguarda anti-borrado en purga sobre la propia hoja y subcarpetas).
   - Borrado **permanente** inmediato de temporales (`Drive.Files.remove`) en bloque `finally`, más trigger diario de purga para huérfanos.
   - Protección contra *Formula Injection* en `Auditoría` y política configurable de registro de nombres (`COMPLETO`, `ANONIMIZADO`, `NINGUNO`).
@@ -45,7 +46,7 @@ Siguiendo un diseño *Zero Trust* respecto al navegador y mínimo privilegio en 
 2. **Encapsulación estricta de funciones internas (sufijo `_`):** todas las funciones internas de configuración, caché, lectura/purga de auditoría y conversión llevan sufijo `_` para impedir su invocación directa desde `google.script.run` en consola DevTools.
 3. **Control de rol Administrador y tokens efímeros de diálogo (`assertSpreadsheetAdmin_` + `dialogToken`):** a diferencia de un backend web tradicional (donde la app pública y el panel de administración se aíslan por rutas o sesiones distintas), en proyectos Apps Script vinculados a una hoja que además publican una WebApp `google.script.run` aplana todas las funciones globales sin `_` en un único espacio RPC compartido entre la WebApp y los modales de Sheets. Mientras `assertSpreadsheetAdmin_` bloquea a cualquier usuario que no sea propietario o editor de la hoja, el `dialogToken` efímero emitido al abrir cada diálogo añade una capa ligera (~20 líneas, análoga a un token anti-CSRF de contexto) de defensa en profundidad frente a una eventual escalada lateral *WebApp → funciones administrativas de Sheets* bajo la sesión del propio administrador.
 4. **Defensa anti-*Confused Deputy* en conversión por enlace de Drive (`assertDriveFileSharedWithRequester_`):** aunque la WebApp ejecuta como cuenta administradora, `convertDriveUrl_` bloquea explícitamente el acceso a la propia hoja de control, a la carpeta temporal interna y a cualquier archivo privado del administrador que no esté compartido explícitamente con el solicitante, con su dominio Workspace o de forma pública.
-5. **Política *Fail-Closed* e integridad de sesiones:** cualquier petición sin email institucional verificado (`NO_SESSION_EMAIL`) es rechazada; las sesiones fragmentadas de subida y descarga (`uploadFileChunk_`, `finalizeChunkedConversion_`, `abortChunkedUpload_`, `fetchPdfDownloadChunk_`, `completePdfDownload_`) verifican estrictamente que el solicitante sea el propietario de la sesión.
+5. **Política *Fail-Closed* e integridad de sesiones:** cualquier petición sin email institucional verificado (`NO_SESSION_EMAIL`) es rechazada. En control de acceso se aplica precedencia estricta `LISTA_NEGRA_USUARIOS` → `LISTA_BLANCA_USUARIOS` → `DOMINIOS_PERMITIDOS`, y cualquier grupo marcado con `g:` inaccesible o sin permiso para consultar miembros (`BLACKLIST_GROUP_ERROR` / `WHITELIST_GROUP_ERROR`) deniega el acceso preventivamente. Las sesiones fragmentadas de subida y descarga (`uploadFileChunk_`, `finalizeChunkedConversion_`, `abortChunkedUpload_`, `fetchPdfDownloadChunk_`, `completePdfDownload_`) verifican estrictamente que el solicitante sea el propietario de la sesión.
 6. **Protección de hoja de cálculo:** escritura en `Auditoría` serializada con `LockService`, sanitización contra *Formula Injection* (`=`, `+`, `-`, `@`) y modos de registro `COMPLETO` / `ANONIMIZADO` / `NINGUNO`.
 
 ---
@@ -77,6 +78,7 @@ La raíz del repositorio coincide con el directorio raíz de `clasp` (`rootDir: 
 ├── DashboardDialog.html     # Diálogo modal de Resumen y analítica (SVG nativo)
 ├── AboutDialog.html         # Diálogo modal "Acerca de Doc2PDF" con banner Base64 WebP
 ├── InitDialog.html          # Confirmación de reinicialización con aviso de borrado/recorte
+├── AccessCheckDialog.html   # Diagnóstico visual de listas negra/blanca y Google Groups
 └── DeployDialog.html        # Asistente paso a paso para guardar la URL de WebApp
 ```
 
@@ -134,8 +136,8 @@ La pestaña `Ajustes` incorpora validaciones estrictas de datos sobre sus 21 par
 | `SERVICIO_ACTIVO` | `SI` *(marcada)* | Casilla (`SI` / `NO`) | Activa (marcada) o pausa en modo mantenimiento (desmarcada) el conversor |
 | `MENSAJE_MANTENIMIENTO` | *(mensaje estándar)* | Texto (máx. 300 car.) | Aviso mostrado cuando `SERVICIO_ACTIVO` está desmarcado |
 | `DOMINIOS_PERMITIDOS` | *(vacío)* | Lista por comas | Dominios Workspace permitidos (vacío = dominio del desplegador) |
-| `LISTA_BLANCA_USUARIOS` | *(vacío)* | Lista por comas | Correos autorizados (vacío = todo el dominio) |
-| `LISTA_NEGRA_USUARIOS` | *(vacío)* | Lista por comas | Correos bloqueados |
+| `LISTA_NEGRA_USUARIOS` | *(vacío)* | Lista por comas | Opcional *(se evalúa primero y prevalece sobre lista blanca)*: correos de usuario o Google Groups bloqueados *(usa `g:grupo@dominio` para modo estricto)* |
+| `LISTA_BLANCA_USUARIOS` | *(vacío)* | Lista por comas | Opcional *(vacío = todo el dominio)*: correos de usuario o Google Groups autorizados *(usa `g:grupo@dominio` para modo estricto; exentos admins de la hoja)* |
 | `LIMITE_DIARIO_USUARIO` | `30` | Numérico (`0 – 10 000`) | Conversiones máximas por usuario al día (`0` = sin límite; sugerido) |
 | `TAMANO_MAX_MB` | `20` | Numérico (`1 – 45`) | Peso máximo por archivo en MB *(límite técnico seguro bajo tope de 50 MB de Apps Script)* |
 | `MAX_ARCHIVOS_LOTE` | `5` | Numérico (`1 – 20`) | Máximo de archivos admitidos por lote al arrastrar o seleccionar *(sugerido)* |
@@ -150,11 +152,104 @@ La pestaña `Ajustes` incorpora validaciones estrictas de datos sobre sus 21 par
 | `CARPETA_TEMP_ID` | *(automático)* | Texto (ID Drive) | ID de la subcarpeta `_Doc2PDF_Temp` creada junto a esta hoja |
 
 > [!NOTE]
-> - **Caché:** los ajustes se cachean durante **5 minutos**. Tras editar la pestaña `Ajustes`, puedes aplicar los cambios al instante ejecutando **`📄 Doc2PDF → 🛠️ Mantenimiento → 🔄 Limpiar caché de ajustes`**.
-> - **Equipo administrador y modo mantenimiento:** el rol de administración se determina por la cuenta desplegadora del script más el **propietario y los editores explícitos** de la Google Sheet de control (cacheado 60 s). Quienes pertenezcan a este grupo mantienen acceso de pruebas con un banner de aviso cuando `SERVICIO_ACTIVO` está desmarcado (`NO`) —mientras el resto de usuarios queda bloqueado— y quedan exentos de `LISTA_BLANCA_USUARIOS`, `DOMINIOS_PERMITIDOS` y `LIMITE_DIARIO_USUARIO` (`Sin límite (Admin)` en la cabecera, conservando el registro en `Auditoría`).
+> - **Caché:** los ajustes y la resolución/pertenencia a Google Groups se cachean durante **5 minutos** (`ScriptCache`). Tras editar la pestaña `Ajustes` o modificar miembros de un grupo, puedes aplicar los cambios al instante ejecutando **`📄 Doc2PDF → 🛠️ Mantenimiento → 🔄 Limpiar caché de ajustes`**.
+> - **Equipo administrador y modo mantenimiento:** el rol de administración se determina por la cuenta desplegadora del script más el **propietario y los editores explícitos** de la Google Sheet de control (cacheado 60 s). Quienes pertenezcan a este grupo mantienen acceso de pruebas con un banner de aviso cuando `SERVICIO_ACTIVO` está desmarcado (`NO`) —mientras el resto de usuarios queda bloqueado— y quedan exentos de `LISTA_BLANCA_USUARIOS`, `DOMINIOS_PERMITIDOS` y `LIMITE_DIARIO_USUARIO` (`Sin límite (Admin)` en la cabecera, conservando el registro en `Auditoría`), aunque **nunca están exentos de `LISTA_NEGRA_USUARIOS`**.
 > - **Cuota diaria y caché:** `LIMITE_DIARIO_USUARIO` se calcula mediante caché (`ScriptCache`, TTL máximo de 6 h) respaldada sobre `Auditoría` en la zona horaria de la hoja de cálculo, contabilizando únicamente conversiones finalizadas con estado `OK`.
 > - **Concurrencia de conversión:** `MAX_ARCHIVOS_LOTE` limita cuántos archivos entran en cola en cada envío; la WebApp los procesa de **2 en 2** en paralelo (`DIRECT_CONCURRENCY = 2`) para subidas directas (`<= 6 MB`) y enlaces de Drive, y de **1 en 1** en subidas fragmentadas (`> 6 MB`), protegiendo así el cupo compartido de 30 ejecuciones simultáneas de Apps Script.
 > - **Carpeta temporal y privacidad:** `_Doc2PDF_Temp` se crea automáticamente como subcarpeta en la misma carpeta donde reside la Google Sheet (heredando sus permisos). Se recomienda alojar la hoja de control en una **carpeta privada** del administrador o cuenta funcional.
+
+### Control de acceso: listas de usuarios y grupos
+
+Tanto `LISTA_NEGRA_USUARIOS` como `LISTA_BLANCA_USUARIOS` aceptan indistintamente **cuentas individuales de usuario y direcciones de Google Groups** en la misma celda, separadas por comas, puntos y coma o saltos de línea (por ejemplo: `alumnado@centro.edu, g:exalumnos@centro.edu, becario@centro.edu`).
+
+1. **Orden de evaluación y precedencia (*deny overrides allow*):**
+   Doc2PDF evalúa siempre las reglas en el mismo orden en que figuran en `Ajustes`:
+   1. **`LISTA_NEGRA_USUARIOS` (máxima prioridad):** si la cuenta coincide directamente o pertenece a algún grupo de esta lista, el acceso se **deniega siempre** (`USER_BLOCKED`), **prevaleciendo sobre cualquier permiso en `LISTA_BLANCA_USUARIOS`, `DOMINIOS_PERMITIDOS` o el rol Administrador**.
+   2. **`LISTA_BLANCA_USUARIOS`:** si contiene al menos una entrada, solo pueden acceder los usuarios o miembros de grupos incluidos en ella (más propietarios/editores explícitos de la hoja); si está vacía, se admite al conjunto del dominio.
+   3. **`DOMINIOS_PERMITIDOS`:** valida el dominio de la cuenta (salvo para administradores de la hoja).
+
+   | Caso de solapamiento | Resultado |
+   | :--- | :--- |
+   | Usuario en lista negra **y** en lista blanca | **Bloqueado** (`LISTA_NEGRA_USUARIOS` prevalece) |
+   | Grupo en lista negra **y** usuario individual en lista blanca | **Bloqueado** si el usuario pertenece al grupo negro |
+   | Grupo en lista blanca **y** usuario o grupo bloqueado en lista negra | **Bloqueado** para quien esté en lista negra; **permitido** para el resto del grupo blanco |
+
+2. **Cómo comprueba las entradas y para qué sirve el prefijo `g:` (*Fail-Closed*):**
+   - **Comprobación en dos pasos:** primero comprueba en memoria si el correo del usuario conectado aparece escrito literalmente en la lista (entre las entradas sin prefijo `g:`). Si coincide, resuelve el acceso al instante sin hacer ninguna consulta a Google Groups, ahorrando latencia y cuota diaria de `GroupsApp`. Solo cuando no hay coincidencia directa consulta los posibles grupos (cacheando el resultado 5 minutos en `ScriptCache`).
+   - **Por qué existe `g:` (autodetección frente a modo estricto *Fail-Closed*):**
+     - Si escribes una dirección **sin prefijo** (`alumnado@centro.edu`) y Google Groups no la encuentra, Doc2PDF no puede distinguir si se trata de una **cuenta de usuario individual** o de un **grupo mal escrito, borrado u oculto** para la cuenta desplegadora. Por ello asume que es una cuenta individual (cacheándola 5 minutos para no repetir consultas). El riesgo es que, en `LISTA_NEGRA_USUARIOS`, una simple errata o un cambio de visibilidad dejaría de bloquear a los miembros del grupo en silencio.
+     - Al anteponer **`g:`** (`g:alumnado@centro.edu`, o su alias `grupo:alumnado@centro.edu`), declaras explícitamente que esa entrada **debe existir y poder leerse como un Google Group**. Si falla por errata, borrado o falta de permisos, Doc2PDF no la interpreta como correo individual: **bloquea preventivamente el acceso (*Fail-Closed*)** y registra el grupo afectado en `Auditoría` (`BLACKLIST_GROUP_ERROR` / `WHITELIST_GROUP_ERROR`) para que ninguna regla quede desactivada sin aviso.
+
+   | Formato en celda | Comportamiento si no resuelve como grupo | Comportamiento si el grupo existe pero oculta miembros | Uso recomendado |
+   | :--- | :--- | :--- | :--- |
+   | `correo@dominio` *(sin prefijo)* | Lo trata como cuenta de usuario individual (cacheado 5 min para evitar reconsultas) | **Bloqueo *Fail-Closed*** (`BLACKLIST_GROUP_ERROR` / `WHITELIST_GROUP_ERROR`) | Cuentas individuales o listas mixtas simples donde prefieres omitir prefijos |
+   | `g:grupo@dominio` *(o `grupo:grupo@dominio`)* | **Bloqueo *Fail-Closed*** (error explícito de grupo inexistente o sin permiso) | **Bloqueo *Fail-Closed*** (`BLACKLIST_GROUP_ERROR` / `WHITELIST_GROUP_ERROR`) | **Recomendado para todos los Google Groups** (especialmente en `LISTA_NEGRA_USUARIOS`): impide que una errata o falta de permisos silencie una regla |
+
+3. **Membresía directa y requisitos de permisos (Google Groups):**
+   - La comprobación usa el servicio nativo `GroupsApp.getGroupByEmail(correo).hasUser(email)` bajo el scope `https://www.googleapis.com/auth/groups`, sin requerir **Admin SDK / Directory API** ni privilegios de Superadministrador sobre toda la consola Workspace.
+   - **Solo verifica membresía directa:** si un grupo A contiene anidado un grupo B, la pertenencia a B **no** se hereda automáticamente; añade explícitamente el grupo B si necesitas incluirlo.
+   - **Visibilidad obligatoria para la cuenta desplegadora:** para que `GroupsApp` pueda evaluar un grupo sin errores, la cuenta desplegadora (`executeAs: "USER_DEPLOYING"`) debe poder localizar el grupo en el directorio y tener permiso de lectura sobre su lista de miembros (**Google Groups → Configuración del grupo → *Quién puede ver a los miembros***).
+   - **Diagnóstico en Sheets:** tras configurar grupos o cuentas, ejecuta **`📄 Doc2PDF → 🛠️ Mantenimiento → 🔍 Verificar listas de acceso y grupos`** para validar en vivo qué entradas resuelven como grupo, detectar faltas de permisos o advertir sobre solapamientos antes de publicar cambios.
+
+#### Flujo de evaluación y optimizaciones
+
+El diagrama siguiente resume cómo Doc2PDF aplica **cortocircuito por precedencia**, **resolución directa en memoria sin llamadas a `GroupsApp`** y **caché de 5 minutos en `ScriptCache`** (`GTYPE` / `GMEM`) para minimizar latencia y consumo de cuota incluso con listas mixtas amplias:
+
+```mermaid
+flowchart TD
+  REQ(["Petición entrante · correo Workspace verificado"]) --> BL_EMPTY
+
+  subgraph BL["1. LISTA_NEGRA_USUARIOS (máxima prioridad · incluye admins)"]
+    BL_EMPTY{"¿Lista negra vacía?"}
+    BL_DIRECT{"¿Correo literal sin g: coincide en memoria?"}
+    BL_GRP["Evaluar grupos · caché 5 min GTYPE/GMEM y GroupsApp si falta"]
+    BL_BLOCK(["Denegado: USER_BLOCKED · corta sin evaluar lista blanca"])
+    BL_ERR(["Denegado Fail-Closed: BLACKLIST_GROUP_ERROR"])
+
+    BL_EMPTY -->|"No"| BL_DIRECT
+    BL_DIRECT -->|"Sí · 0 llamadas GroupsApp"| BL_BLOCK
+    BL_DIRECT -->|"No"| BL_GRP
+    BL_GRP -->|"Miembro de grupo"| BL_BLOCK
+    BL_GRP -->|"Error g: o sin permiso de miembros"| BL_ERR
+  end
+
+  BL_EMPTY -->|"Sí"| WL_SKIP
+  BL_GRP -->|"Sin coincidencia"| WL_SKIP
+
+  subgraph WL["2. LISTA_BLANCA_USUARIOS (exentos admins de la hoja)"]
+    WL_SKIP{"¿Lista blanca vacía o usuario Admin?"}
+    WL_DIRECT{"¿Correo literal sin g: coincide en memoria?"}
+    WL_GRP["Evaluar grupos · caché 5 min GTYPE/GMEM y GroupsApp si falta"]
+    WL_ERR(["Denegado Fail-Closed: WHITELIST_GROUP_ERROR"])
+    WL_DENY(["Denegado: NOT_IN_WHITELIST"])
+
+    WL_SKIP -->|"No"| WL_DIRECT
+    WL_DIRECT -->|"No"| WL_GRP
+    WL_GRP -->|"Error g: o sin permiso de miembros"| WL_ERR
+    WL_GRP -->|"Sin coincidencia"| WL_DENY
+  end
+
+  WL_SKIP -->|"Sí · 0 llamadas GroupsApp"| DOM_CHK
+  WL_DIRECT -->|"Sí · 0 llamadas GroupsApp"| DOM_CHK
+  WL_GRP -->|"Miembro de grupo"| DOM_CHK
+
+  subgraph DOM["3. DOMINIOS_PERMITIDOS (exentos admins de la hoja)"]
+    DOM_CHK{"¿Admin o dominio autorizado?"}
+    ALLOW_OK(["Acceso autorizado · pasa a cuota diaria"])
+    DOM_DENY(["Denegado: DOMAIN_NOT_ALLOWED"])
+
+    DOM_CHK -->|"Sí"| ALLOW_OK
+    DOM_CHK -->|"No"| DOM_DENY
+  end
+
+  classDef deny stroke:#d93025,stroke-width:2px;
+  classDef allow stroke:#188038,stroke-width:2px;
+  classDef fast stroke:#1a73e8,stroke-width:2px;
+
+  class BL_BLOCK,BL_ERR,WL_ERR,WL_DENY,DOM_DENY deny;
+  class ALLOW_OK allow;
+  class BL_DIRECT,WL_SKIP,WL_DIRECT fast;
+```
 
 ---
 

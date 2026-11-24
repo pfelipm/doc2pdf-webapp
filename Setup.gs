@@ -13,7 +13,8 @@ function onOpen() {
     .addItem('🔄 Limpiar caché de ajustes', 'menuClearConfigCache')
     .addItem('🧹 Purgar archivos temporales ahora', 'menuPurgeTempFiles')
     .addItem('⏱️ Instalar trigger diario de limpieza', 'menuInstallMaintenanceTrigger')
-    .addItem('🔍 Verificar formatos Drive API', 'menuCheckDriveImportFormats');
+    .addItem('🔍 Verificar formatos Drive API', 'menuCheckDriveImportFormats')
+    .addItem('🔍 Verificar listas de acceso y grupos', 'menuCheckAccessLists');
 
   ui.createMenu('📄 Doc2PDF')
     .addItem('🌐 Abrir WebApp', 'openWebAppDialog')
@@ -403,7 +404,7 @@ function showAboutDialog() {
 function menuClearConfigCache() {
   assertSpreadsheetAdmin_('menuClearConfigCache');
   clearConfigCache_();
-  getSpreadsheet_().toast('Caché de ajustes limpiada. La próxima petición leerá la hoja directamente.', APP_NAME, 4);
+  getSpreadsheet_().toast('Caché de ajustes, administradores y Google Groups limpiada.', APP_NAME, 4);
 }
 
 /**
@@ -461,6 +462,22 @@ function menuCheckDriveImportFormats() {
     lines.join('\n'),
     SpreadsheetApp.getUi().ButtonSet.OK
   );
+}
+
+/**
+ * Acción de menú: inspecciona en vivo las listas negra y blanca en un modal HTML de diagnóstico.
+ */
+function menuCheckAccessLists() {
+  assertSpreadsheetAdmin_('menuCheckAccessLists');
+  const cfg = getConfig_(true);
+  const report = inspectAccessLists_(cfg);
+
+  const template = HtmlService.createTemplateFromFile('AccessCheckDialog');
+  template.appName = cfg.NOMBRE_APP;
+  template.accentColor = cfg.COLOR_ACENTO;
+  template.report = report;
+  const html = template.evaluate().setWidth(620).setHeight(600);
+  SpreadsheetApp.getUi().showModalDialog(html, ' ');
 }
 
 /* ============================================================================
