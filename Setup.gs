@@ -365,7 +365,7 @@ function openWebAppDialog() {
         </script>
       </body>
     </html>
-  `).setWidth(460).setHeight(255);
+  `).setWidth(480).setHeight(300);
 
   SpreadsheetApp.getUi().showModalDialog(html, ' ');
 }
