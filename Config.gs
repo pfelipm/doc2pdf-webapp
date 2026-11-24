@@ -400,6 +400,74 @@ function parseAccessListSetting_(val) {
 }
 
 /**
+ * Valida, limpia y deduplica una lista de control de acceso (usuarios o grupos g:).
+ * Si la misma dirección aparece sin prefijo y con prefijo g:, conserva la variante estricta g:.
+ * @param {string|Array<string>} rawInput
+ * @return {{ok: boolean, entries: Array<string>, cellValue: string, invalid?: Array<string>, error?: string}}
+ */
+function validateAndNormalizeAccessList_(rawInput) {
+  const joined = Array.isArray(rawInput) ? rawInput.join(', ') : String(rawInput || '');
+  const parsed = parseAccessListSetting_(joined);
+  const emailRegex = /^[a-z0-9][a-z0-9._%+-]*@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/;
+
+  const invalid = [];
+  const order = [];
+  const byEmail = {};
+
+  for (let i = 0; i < parsed.length; i++) {
+    const token = parsed[i];
+    const explicitGroup = token.indexOf('g:') === 0;
+    const email = explicitGroup ? token.slice(2).trim() : token;
+    if (!email || !emailRegex.test(email)) {
+      invalid.push(token);
+      continue;
+    }
+    const canonical = explicitGroup ? 'g:' + email : email;
+    if (!Object.prototype.hasOwnProperty.call(byEmail, email)) {
+      byEmail[email] = { email: email, explicitGroup: explicitGroup, raw: canonical };
+      order.push(email);
+    } else if (!byEmail[email].explicitGroup && explicitGroup) {
+      byEmail[email].explicitGroup = true;
+      byEmail[email].raw = canonical;
+    }
+  }
+
+  if (invalid.length > 0) {
+    return {
+      ok: false,
+      entries: [],
+      cellValue: '',
+      invalid: invalid,
+      error: 'Entradas no válidas (usa correo@dominio o g:grupo@dominio): ' + invalid.join(', ')
+    };
+  }
+
+  const entries = order.map(function (emailKey) { return byEmail[emailKey].raw; });
+  if (entries.length > 250) {
+    return {
+      ok: false,
+      entries: [],
+      cellValue: '',
+      invalid: [],
+      error: 'Cada lista admite un máximo de 250 entradas.'
+    };
+  }
+
+  const cellValue = entries.join(', ');
+  if (cellValue.length > 10000) {
+    return {
+      ok: false,
+      entries: [],
+      cellValue: '',
+      invalid: [],
+      error: 'La lista supera el límite de longitud permitido (10 000 caracteres).'
+    };
+  }
+
+  return { ok: true, entries: entries, cellValue: cellValue };
+}
+
+/**
  * Construye el mapa base con valores por defecto sin leer de la hoja.
  */
 function buildDefaultRawConfig_() {
@@ -564,6 +632,71 @@ function setConfigValue_(key, value) {
     }
   }
   return false;
+}
+
+/**
+ * Valida, guarda atómicamente en "Ajustes" ambas listas de acceso (negra y blanca),
+ * invalida las cachés de configuración/grupos y devuelve el diagnóstico en vivo.
+ * @param {string|Array<string>} blacklistInput
+ * @param {string|Array<string>} whitelistInput
+ * @return {{report: Object, savedBlacklist: Array<string>, savedWhitelist: Array<string>}}
+ */
+function saveAccessLists_(blacklistInput, whitelistInput) {
+  const bl = validateAndNormalizeAccessList_(blacklistInput);
+  if (!bl.ok) {
+    const err = new Error('Lista negra inválida — ' + bl.error);
+    err.code = 'INVALID_ACCESS_ENTRY';
+    throw err;
+  }
+  const wl = validateAndNormalizeAccessList_(whitelistInput);
+  if (!wl.ok) {
+    const err = new Error('Lista blanca inválida — ' + wl.error);
+    err.code = 'INVALID_ACCESS_ENTRY';
+    throw err;
+  }
+
+  const ss = getSpreadsheet_();
+  if (!ss) {
+    throw new Error('No hay una hoja de cálculo activa.');
+  }
+  const sheet = ss.getSheetByName(SHEET_CONFIG_NAME);
+  if (!sheet || sheet.getLastRow() < 2) {
+    throw new Error('La pestaña "Ajustes" no está inicializada.');
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const lastRow = sheet.getLastRow();
+    const keys = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    let blRow = -1;
+    let wlRow = -1;
+    for (let i = 0; i < keys.length; i++) {
+      const k = String(keys[i][0] || '').trim();
+      if (k === 'LISTA_NEGRA_USUARIOS') blRow = i + 2;
+      if (k === 'LISTA_BLANCA_USUARIOS') wlRow = i + 2;
+    }
+    if (blRow < 2 || wlRow < 2) {
+      throw new Error('No se encontraron las claves LISTA_NEGRA_USUARIOS o LISTA_BLANCA_USUARIOS en Ajustes.');
+    }
+
+    sheet.getRange(blRow, 2).setValue(bl.cellValue);
+    sheet.getRange(wlRow, 2).setValue(wl.cellValue);
+    if (typeof SpreadsheetApp !== 'undefined' && typeof SpreadsheetApp.flush === 'function') {
+      SpreadsheetApp.flush();
+    }
+    clearConfigCache_();
+  } finally {
+    lock.releaseLock();
+  }
+
+  const cfg = getConfig_(true);
+  const report = inspectAccessLists_(cfg);
+  return {
+    report: report,
+    savedBlacklist: bl.entries,
+    savedWhitelist: wl.entries
+  };
 }
 
 /**

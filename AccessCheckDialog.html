@@ -3,38 +3,13 @@
   <head>
     <base target="_top">
     <meta charset="utf-8">
-    <title>Verificación de listas de acceso | <?= appName ?></title>
+    <title>Gestionar listas de acceso | <?= appName ?></title>
     <?!= include_('DialogStyles'); ?>
     <style>
       :root { --accent: <?= accentColor ?>; }
     </style>
   </head>
   <body>
-    <?
-      const blacklistItems = (report && report.blacklist) || [];
-      const whitelistItems = (report && report.whitelist) || [];
-      const overlaps = (report && report.overlaps) || [];
-      const errorCount = (report && report.errors) || 0;
-      const tagMap = {
-        GROUP_OK: { label: 'Grupo OK', cls: 'badge-ok' },
-        USER_OR_UNAVAILABLE: { label: 'Usuario', cls: 'badge-muted' },
-        GROUP_PERMISSION_ERROR: { label: 'Sin permisos', cls: 'badge-err' },
-        EXPLICIT_GROUP_ERROR: { label: 'Error g:', cls: 'badge-err' }
-      };
-      const sections = [
-        {
-          title: 'LISTA_NEGRA_USUARIOS',
-          subtitle: 'Máxima prioridad · bloquea incluso a administradores',
-          items: blacklistItems
-        },
-        {
-          title: 'LISTA_BLANCA_USUARIOS',
-          subtitle: 'Vacía = todo el dominio (exentos administradores de la hoja)',
-          items: whitelistItems
-        }
-      ];
-    ?>
-
     <header class="hdr">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -46,19 +21,19 @@
     <main class="body">
       <div class="kpi-row kpi-row-4">
         <div class="kpi-card">
-          <span class="kpi-val"><?= blacklistItems.length ?></span>
+          <span id="kpiBlacklist" class="kpi-val">0</span>
           <span class="kpi-lbl">Lista negra</span>
         </div>
         <div class="kpi-card">
-          <span class="kpi-val"><?= whitelistItems.length ?></span>
+          <span id="kpiWhitelist" class="kpi-val">0</span>
           <span class="kpi-lbl">Lista blanca</span>
         </div>
         <div class="kpi-card">
-          <span class="kpi-val <?= overlaps.length > 0 ? 'is-warn' : '' ?>"><?= overlaps.length ?></span>
+          <span id="kpiOverlaps" class="kpi-val">0</span>
           <span class="kpi-lbl">Solapamientos</span>
         </div>
         <div class="kpi-card">
-          <span class="kpi-val <?= errorCount > 0 ? 'is-err' : 'is-ok' ?>"><?= errorCount ?></span>
+          <span id="kpiErrors" class="kpi-val is-ok">0</span>
           <span class="kpi-lbl">Errores</span>
         </div>
       </div>
@@ -67,51 +42,45 @@
         <strong>Orden de evaluación:</strong> LISTA_NEGRA_USUARIOS → LISTA_BLANCA_USUARIOS → DOMINIOS_PERMITIDOS
       </div>
 
-      <? if (errorCount > 0) { ?>
-        <div class="notice notice-err" role="alert">
-          <div class="notice-title">Bloqueo preventivo (Fail-Closed) activo en <?= errorCount ?> entrada(s)</div>
-          <div>
-            Las entradas marcadas con error provocarán denegación preventiva hasta corregirse o ajustar el permiso
-            <b>«Quién puede ver a los miembros»</b> en la configuración del grupo de Google Groups.
-          </div>
-        </div>
-      <? } ?>
+      <div id="alertsBox"></div>
 
-      <? if (overlaps.length > 0) { ?>
-        <div class="notice notice-warn">
-          <div class="notice-title">Solapamientos detectados (prevalece LISTA_NEGRA_USUARIOS)</div>
-          <div>
-            Estas direcciones figuran en ambas listas: <code><?= overlaps.join(', ') ?></code>.
-          </div>
+      <section class="list-card" aria-labelledby="heading_blacklist">
+        <div class="list-head">
+          <h2 id="heading_blacklist" class="is-mono">LISTA_NEGRA_USUARIOS (<span id="count_blacklist">0</span>)</h2>
+          <span class="list-sub">Máxima prioridad · bloquea incluso a administradores</span>
         </div>
-      <? } ?>
+        <form id="addForm_blacklist" class="add-entry-form" data-list="blacklist" novalidate>
+          <label class="visually-hidden" for="addInput_blacklist">Añadir usuario o grupo a LISTA_NEGRA_USUARIOS</label>
+          <input type="text" id="addInput_blacklist" class="add-entry-input" placeholder="usuario@dominio o g:grupo@dominio (separados por comas)" autocomplete="off" aria-invalid="false" data-error="addErr_blacklist">
+          <label class="strict-toggle" for="addStrict_blacklist" title="Anteponer g: para modo estricto de Google Group (Fail-Closed)">
+            <input type="checkbox" id="addStrict_blacklist" class="strict-chk">
+            <span>g:</span>
+          </label>
+          <button type="submit" class="btn-sm-add">Añadir</button>
+          <span id="addErr_blacklist" class="inline-err" hidden></span>
+        </form>
+        <p id="empty_blacklist" class="empty-state" hidden>Sin entradas configuradas.</p>
+        <ul id="list_blacklist" class="entry-list" role="list"></ul>
+      </section>
 
-      <? for (let s = 0; s < sections.length; s++) {
-           const sec = sections[s]; ?>
-        <section class="list-card">
-          <div class="list-head">
-            <h2 class="is-mono"><?= sec.title ?> (<?= sec.items.length ?>)</h2>
-            <span class="list-sub"><?= sec.subtitle ?></span>
-          </div>
-          <? if (sec.items.length === 0) { ?>
-            <p class="empty-state">Sin entradas configuradas.</p>
-          <? } else { ?>
-            <ul class="entry-list" role="list">
-              <? for (let i = 0; i < sec.items.length; i++) {
-                   const item = sec.items[i];
-                   const badge = tagMap[item.kind] || { label: item.kind, cls: 'badge-muted' }; ?>
-                <li class="entry-row">
-                  <div class="entry-main">
-                    <span class="entry-email"><?= item.raw ?></span>
-                    <span class="entry-detail"><?= item.detail ?></span>
-                  </div>
-                  <span class="status-badge <?= badge.cls ?>"><?= badge.label ?></span>
-                </li>
-              <? } ?>
-            </ul>
-          <? } ?>
-        </section>
-      <? } ?>
+      <section class="list-card" aria-labelledby="heading_whitelist">
+        <div class="list-head">
+          <h2 id="heading_whitelist" class="is-mono">LISTA_BLANCA_USUARIOS (<span id="count_whitelist">0</span>)</h2>
+          <span class="list-sub">Vacía = todo el dominio (exentos administradores de la hoja)</span>
+        </div>
+        <form id="addForm_whitelist" class="add-entry-form" data-list="whitelist" novalidate>
+          <label class="visually-hidden" for="addInput_whitelist">Añadir usuario o grupo a LISTA_BLANCA_USUARIOS</label>
+          <input type="text" id="addInput_whitelist" class="add-entry-input" placeholder="usuario@dominio o g:grupo@dominio (separados por comas)" autocomplete="off" aria-invalid="false" data-error="addErr_whitelist">
+          <label class="strict-toggle" for="addStrict_whitelist" title="Anteponer g: para modo estricto de Google Group (Fail-Closed)">
+            <input type="checkbox" id="addStrict_whitelist" class="strict-chk">
+            <span>g:</span>
+          </label>
+          <button type="submit" class="btn-sm-add">Añadir</button>
+          <span id="addErr_whitelist" class="inline-err" hidden></span>
+        </form>
+        <p id="empty_whitelist" class="empty-state" hidden>Sin entradas configuradas (se admite todo el dominio).</p>
+        <ul id="list_whitelist" class="entry-list" role="list"></ul>
+      </section>
 
       <section class="list-card" aria-labelledby="legendHeading">
         <div class="list-head">
@@ -137,10 +106,487 @@
           </li>
         </ul>
       </section>
+
+      <div id="statusMsg" class="status-msg" role="status" aria-live="polite">
+        <progress id="accessSpinner" class="loading-spinner" aria-label="Guardando y verificando listas" hidden></progress>
+        <span id="statusText"></span>
+      </div>
     </main>
 
-    <footer class="footer-bar">
-      <button type="button" class="btn btn-close" onclick="google.script.host.close()">Cerrar</button>
+    <footer class="footer-bar is-between">
+      <div class="footer-actions">
+        <button type="button" id="saveVerifyBtn" class="btn btn-primary" onclick="saveOrVerify()">Volver a verificar</button>
+        <button type="button" id="discardBtn" class="btn btn-outline" onclick="discardChanges()" hidden>Descartar cambios</button>
+      </div>
+      <button type="button" id="closeBtn" class="btn btn-close" onclick="google.script.host.close()">Cerrar</button>
     </footer>
+
+    <script>
+      const DIALOG_TOKEN = '<?= dialogToken ?>';
+      const RAW_INITIAL_REPORT = <?!= reportJson ?>;
+      const INITIAL_REPORT = (RAW_INITIAL_REPORT && typeof RAW_INITIAL_REPORT === 'object')
+        ? RAW_INITIAL_REPORT
+        : { blacklist: [], whitelist: [], overlaps: [], errors: 0 };
+
+      const EMAIL_RE = /^[a-z0-9][a-z0-9._%+-]*@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/;
+      const TAG_MAP = {
+        GROUP_OK: { label: 'Grupo OK', cls: 'badge-ok' },
+        USER_OR_UNAVAILABLE: { label: 'Usuario', cls: 'badge-muted' },
+        GROUP_PERMISSION_ERROR: { label: 'Sin permisos', cls: 'badge-err' },
+        EXPLICIT_GROUP_ERROR: { label: 'Error g:', cls: 'badge-err' },
+        PENDING: { label: 'Sin verificar', cls: 'badge-info' }
+      };
+
+      let savedReport = cloneReport(INITIAL_REPORT);
+      let draft = {
+        blacklist: cloneItems(savedReport.blacklist),
+        whitelist: cloneItems(savedReport.whitelist)
+      };
+      let isBusy = false;
+
+      function cloneItems(items) {
+        const src = Array.isArray(items) ? items : [];
+        return src.map(function (it) {
+          return {
+            raw: String(it.raw || ''),
+            email: String(it.email || ''),
+            explicitGroup: Boolean(it.explicitGroup),
+            kind: String(it.kind || 'PENDING'),
+            detail: String(it.detail || ''),
+            isLocal: Boolean(it.isLocal)
+          };
+        });
+      }
+
+      function cloneReport(rep) {
+        const r = rep || {};
+        return {
+          blacklist: cloneItems(r.blacklist),
+          whitelist: cloneItems(r.whitelist),
+          overlaps: Array.isArray(r.overlaps) ? r.overlaps.slice() : [],
+          errors: Number(r.errors) || 0
+        };
+      }
+
+      function escapeHtml(value) {
+        return String(value === null || value === undefined ? '' : value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function serializeRawList(items) {
+        return (items || []).map(function (it) { return it.raw; }).join('|');
+      }
+
+      function isDirty() {
+        return serializeRawList(draft.blacklist) !== serializeRawList(savedReport.blacklist) ||
+          serializeRawList(draft.whitelist) !== serializeRawList(savedReport.whitelist);
+      }
+
+      function computeOverlaps(blItems, wlItems) {
+        const blMap = {};
+        for (let i = 0; i < blItems.length; i++) {
+          blMap[blItems[i].email] = true;
+        }
+        const seen = {};
+        const overlaps = [];
+        for (let i = 0; i < wlItems.length; i++) {
+          const email = wlItems[i].email;
+          if (blMap[email] && !seen[email]) {
+            seen[email] = true;
+            overlaps.push(email);
+          }
+        }
+        return overlaps;
+      }
+
+      function linkError(el, shown) {
+        const errorId = el && el.dataset ? el.dataset.error : '';
+        if (!errorId) return;
+        const ids = (el.getAttribute('aria-describedby') || '')
+          .split(/\s+/)
+          .filter(function (id) { return id && id !== errorId; });
+        if (shown) ids.push(errorId);
+        if (ids.length) {
+          el.setAttribute('aria-describedby', ids.join(' '));
+        } else {
+          el.removeAttribute('aria-describedby');
+        }
+      }
+
+      function setInputError(inputEl, message) {
+        if (!inputEl) return;
+        const errorId = inputEl.dataset ? inputEl.dataset.error : '';
+        const errEl = errorId ? document.getElementById(errorId) : null;
+        if (message) {
+          inputEl.setAttribute('aria-invalid', 'true');
+          if (errEl) {
+            errEl.textContent = message;
+            errEl.hidden = false;
+          }
+          linkError(inputEl, true);
+        } else {
+          inputEl.setAttribute('aria-invalid', 'false');
+          if (errEl) {
+            errEl.textContent = '';
+            errEl.hidden = true;
+          }
+          linkError(inputEl, false);
+        }
+      }
+
+      function setStatusMessage(kind, msg) {
+        const statusEl = document.getElementById('statusMsg');
+        const statusText = document.getElementById('statusText');
+        if (!statusEl || !statusText) return;
+        statusEl.className = 'status-msg' + (kind === 'ok' ? ' status-ok' : (kind === 'err' ? ' status-err' : ''));
+        statusText.textContent = msg || '';
+      }
+
+      function setBusy(busy, message) {
+        isBusy = Boolean(busy);
+        const spinner = document.getElementById('accessSpinner');
+        if (spinner) spinner.hidden = !isBusy;
+        if (isBusy) {
+          setStatusMessage('', message || 'Procesando...');
+        }
+        const ids = [
+          'addInput_blacklist', 'addStrict_blacklist',
+          'addInput_whitelist', 'addStrict_whitelist',
+          'saveVerifyBtn', 'discardBtn', 'closeBtn'
+        ];
+        for (let i = 0; i < ids.length; i++) {
+          const el = document.getElementById(ids[i]);
+          if (el) el.disabled = isBusy;
+        }
+        const actionBtns = document.querySelectorAll('.btn-sm-add, .row-action-btn');
+        for (let i = 0; i < actionBtns.length; i++) {
+          actionBtns[i].disabled = isBusy;
+        }
+      }
+
+      function parseAndAddEntries(listKey) {
+        if (isBusy) return;
+        const inputEl = document.getElementById('addInput_' + listKey);
+        const strictChk = document.getElementById('addStrict_' + listKey);
+        if (!inputEl) return;
+
+        const rawText = String(inputEl.value || '').trim();
+        if (!rawText) {
+          setInputError(inputEl, 'Introduce al menos una dirección de correo o grupo Google.');
+          inputEl.focus();
+          return;
+        }
+
+        const collapsed = rawText.replace(/(^|[,;\s\n])(?:g|grupo)\s*:\s*/gi, '$1g:');
+        const rawTokens = collapsed.split(/[,;\s\n]+/).filter(Boolean);
+        const forceStrict = Boolean(strictChk && strictChk.checked);
+        const targetList = draft[listKey];
+
+        const invalid = [];
+        const candidates = [];
+        for (let i = 0; i < rawTokens.length; i++) {
+          const tok = rawTokens[i].trim().toLowerCase();
+          if (!tok) continue;
+          let explicitGroup = false;
+          let email = tok;
+          if (tok.indexOf('grupo:') === 0) {
+            explicitGroup = true;
+            email = tok.slice(6).trim();
+          } else if (tok.indexOf('g:') === 0) {
+            explicitGroup = true;
+            email = tok.slice(2).trim();
+          }
+          if (!email || !EMAIL_RE.test(email)) {
+            invalid.push(rawTokens[i]);
+            continue;
+          }
+          const finalExplicit = explicitGroup || forceStrict;
+          candidates.push({
+            email: email,
+            explicitGroup: finalExplicit,
+            raw: finalExplicit ? 'g:' + email : email
+          });
+        }
+
+        if (invalid.length > 0) {
+          setInputError(inputEl, 'Formato no válido (usa correo@dominio o g:grupo@dominio): ' + invalid.join(', '));
+          inputEl.focus();
+          return;
+        }
+
+        let added = 0;
+        let upgraded = 0;
+        for (let i = 0; i < candidates.length; i++) {
+          const cand = candidates[i];
+          let existingIdx = -1;
+          for (let j = 0; j < targetList.length; j++) {
+            if (targetList[j].email === cand.email) {
+              existingIdx = j;
+              break;
+            }
+          }
+          if (existingIdx !== -1) {
+            if (!targetList[existingIdx].explicitGroup && cand.explicitGroup) {
+              targetList[existingIdx] = {
+                raw: cand.raw,
+                email: cand.email,
+                explicitGroup: true,
+                kind: 'PENDING',
+                detail: 'Cambio pendiente de guardar y verificar',
+                isLocal: true
+              };
+              upgraded++;
+            }
+            continue;
+          }
+          if (targetList.length >= 250) {
+            setInputError(inputEl, 'Se alcanzó el límite máximo de 250 entradas en esta lista.');
+            renderAll();
+            return;
+          }
+          targetList.push({
+            raw: cand.raw,
+            email: cand.email,
+            explicitGroup: cand.explicitGroup,
+            kind: 'PENDING',
+            detail: 'Pendiente de guardar y verificar',
+            isLocal: true
+          });
+          added++;
+        }
+
+        if (added === 0 && upgraded === 0) {
+          setInputError(inputEl, 'Las direcciones indicadas ya figuran en la lista.');
+          inputEl.focus();
+          return;
+        }
+
+        setInputError(inputEl, '');
+        inputEl.value = '';
+        if (strictChk) strictChk.checked = false;
+        renderAll();
+        setStatusMessage('', 'Entrada añadida al borrador. Pulsa «Guardar y verificar» para aplicarla en Ajustes.');
+      }
+
+      function renderListSection(listKey) {
+        const items = draft[listKey] || [];
+        const ul = document.getElementById('list_' + listKey);
+        const emptyEl = document.getElementById('empty_' + listKey);
+        const countEl = document.getElementById('count_' + listKey);
+
+        if (countEl) countEl.textContent = String(items.length);
+        if (emptyEl) emptyEl.hidden = items.length > 0;
+        if (!ul) return;
+
+        let html = '';
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          const badge = TAG_MAP[item.kind] || { label: item.kind, cls: 'badge-muted' };
+          const strictActive = item.explicitGroup;
+          const strictLabel = strictActive ? 'g: activo' : '+ g:';
+          const strictTitle = strictActive
+            ? 'Desactivar prefijo estricto g: en ' + item.email
+            : 'Convertir a grupo estricto g:' + item.email + ' (Fail-Closed)';
+
+          html += '<li class="entry-row">' +
+            '<div class="entry-main">' +
+              '<span class="entry-email">' + escapeHtml(item.raw) + '</span>' +
+              '<span class="entry-detail">' + escapeHtml(item.detail) + '</span>' +
+            '</div>' +
+            '<div class="entry-actions">' +
+              '<span class="status-badge ' + badge.cls + '">' + escapeHtml(badge.label) + '</span>' +
+              '<button type="button" class="row-action-btn' + (strictActive ? ' is-strict-active' : '') + '" data-action="toggle-strict" data-list="' + listKey + '" data-idx="' + i + '" title="' + escapeHtml(strictTitle) + '">' + strictLabel + '</button>' +
+              '<button type="button" class="row-action-btn is-remove" data-action="remove" data-list="' + listKey + '" data-idx="' + i + '" aria-label="Eliminar ' + escapeHtml(item.raw) + '" title="Eliminar de la lista">×</button>' +
+            '</div>' +
+          '</li>';
+        }
+        ul.innerHTML = html;
+      }
+
+      function renderAlerts(dirty, overlaps, errorCount) {
+        const box = document.getElementById('alertsBox');
+        if (!box) return;
+        let html = '';
+
+        if (dirty) {
+          html += '<div class="notice notice-info">' +
+            '<div class="notice-title">Cambios pendientes de guardar</div>' +
+            '<div>Pulsa <b>Guardar y verificar</b> para escribir los cambios en <code>Ajustes</code>, limpiar la caché y validar permisos en vivo.</div>' +
+          '</div>';
+        }
+
+        if (errorCount > 0) {
+          html += '<div class="notice notice-err" role="alert">' +
+            '<div class="notice-title">Bloqueo preventivo (Fail-Closed) activo en ' + errorCount + ' entrada(s)</div>' +
+            '<div>Las entradas marcadas con error provocarán denegación preventiva hasta corregirse o ajustar el permiso <b>«Quién puede ver a los miembros»</b> en la configuración del grupo de Google Groups.</div>' +
+          '</div>';
+        }
+
+        if (overlaps.length > 0) {
+          html += '<div class="notice notice-warn">' +
+            '<div class="notice-title">Solapamientos detectados (prevalece LISTA_NEGRA_USUARIOS)</div>' +
+            '<div>Estas direcciones figuran en ambas listas: <code>' + escapeHtml(overlaps.join(', ')) + '</code>.</div>' +
+          '</div>';
+        }
+
+        box.innerHTML = html;
+      }
+
+      function renderAll() {
+        const dirty = isDirty();
+        const overlaps = dirty ? computeOverlaps(draft.blacklist, draft.whitelist) : savedReport.overlaps;
+        const errorCount = Number(savedReport.errors) || 0;
+
+        const kpiBl = document.getElementById('kpiBlacklist');
+        const kpiWl = document.getElementById('kpiWhitelist');
+        const kpiOv = document.getElementById('kpiOverlaps');
+        const kpiErr = document.getElementById('kpiErrors');
+
+        if (kpiBl) kpiBl.textContent = String(draft.blacklist.length);
+        if (kpiWl) kpiWl.textContent = String(draft.whitelist.length);
+        if (kpiOv) {
+          kpiOv.textContent = String(overlaps.length);
+          kpiOv.className = 'kpi-val' + (overlaps.length > 0 ? ' is-warn' : '');
+        }
+        if (kpiErr) {
+          kpiErr.textContent = String(errorCount);
+          kpiErr.className = 'kpi-val ' + (errorCount > 0 ? 'is-err' : 'is-ok');
+        }
+
+        renderAlerts(dirty, overlaps, errorCount);
+        renderListSection('blacklist');
+        renderListSection('whitelist');
+
+        const saveBtn = document.getElementById('saveVerifyBtn');
+        const discardBtn = document.getElementById('discardBtn');
+        if (saveBtn) saveBtn.textContent = dirty ? 'Guardar y verificar' : 'Volver a verificar';
+        if (discardBtn) discardBtn.hidden = !dirty;
+      }
+
+      function handleRowAction(e) {
+        if (isBusy) return;
+        const btn = e.target.closest('button[data-action]');
+        if (!btn) return;
+        const listKey = btn.getAttribute('data-list');
+        const idx = Number(btn.getAttribute('data-idx'));
+        const action = btn.getAttribute('data-action');
+        const items = draft[listKey];
+        if (!items || !items[idx]) return;
+
+        if (action === 'remove') {
+          items.splice(idx, 1);
+          renderAll();
+          setStatusMessage('', isDirty()
+            ? 'Elemento eliminado del borrador. Pulsa «Guardar y verificar» para aplicarlo.'
+            : 'Borrador igual a la configuración guardada.');
+          return;
+        }
+
+        if (action === 'toggle-strict') {
+          const item = items[idx];
+          const nextExplicit = !item.explicitGroup;
+          item.explicitGroup = nextExplicit;
+          item.raw = nextExplicit ? 'g:' + item.email : item.email;
+          item.kind = 'PENDING';
+          item.detail = 'Cambio pendiente de guardar y verificar';
+          renderAll();
+          setStatusMessage('', isDirty()
+            ? 'Prefijo actualizado en el borrador. Pulsa «Guardar y verificar» para aplicarlo.'
+            : 'Borrador igual a la configuración guardada.');
+        }
+      }
+
+      function discardChanges() {
+        if (isBusy) return;
+        draft = {
+          blacklist: cloneItems(savedReport.blacklist),
+          whitelist: cloneItems(savedReport.whitelist)
+        };
+        setInputError(document.getElementById('addInput_blacklist'), '');
+        setInputError(document.getElementById('addInput_whitelist'), '');
+        renderAll();
+        setStatusMessage('', 'Cambios descartados. Se mantiene la configuración guardada.');
+      }
+
+      function saveOrVerify() {
+        if (isBusy) return;
+        const dirty = isDirty();
+        const payload = dirty
+          ? {
+              blacklist: draft.blacklist.map(function (it) { return it.raw; }),
+              whitelist: draft.whitelist.map(function (it) { return it.raw; }),
+              verifyOnly: false
+            }
+          : { verifyOnly: true };
+
+        setBusy(true, dirty ? 'Guardando en Ajustes y verificando grupos...' : 'Limpiando caché y verificando grupos en vivo...');
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            setBusy(false);
+            if (res && res.success && res.report) {
+              savedReport = cloneReport(res.report);
+              draft = {
+                blacklist: cloneItems(savedReport.blacklist),
+                whitelist: cloneItems(savedReport.whitelist)
+              };
+              renderAll();
+              setStatusMessage(
+                'ok',
+                res.saved
+                  ? 'Listas guardadas en Ajustes, caché limpiada y verificación en vivo completada.'
+                  : 'Verificación en vivo completada.'
+              );
+            } else {
+              setStatusMessage('err', (res && res.error) || 'No se pudieron guardar o verificar las listas.');
+            }
+          })
+          .withFailureHandler(function (err) {
+            setBusy(false);
+            setStatusMessage('err', (err && err.message) || 'Error de comunicación con Google Apps Script.');
+          })
+          .apiSaveAccessLists(payload, DIALOG_TOKEN);
+      }
+
+      function bindFormControls(listKey) {
+        const form = document.getElementById('addForm_' + listKey);
+        const input = document.getElementById('addInput_' + listKey);
+        const ul = document.getElementById('list_' + listKey);
+
+        if (form) {
+          form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            parseAndAddEntries(listKey);
+          });
+        }
+        if (input && form) {
+          input.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              if (event.isComposing || event.keyCode === 229) {
+                return;
+              }
+              form.requestSubmit();
+            }
+          });
+          input.addEventListener('input', function () {
+            if (input.getAttribute('aria-invalid') === 'true') {
+              setInputError(input, '');
+            }
+          });
+        }
+        if (ul) {
+          ul.addEventListener('click', handleRowAction);
+        }
+      }
+
+      bindFormControls('blacklist');
+      bindFormControls('whitelist');
+      renderAll();
+    </script>
   </body>
 </html>

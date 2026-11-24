@@ -851,6 +851,127 @@
         0% { background-position: 200% 0; }
         100% { background-position: -200% 0; }
       }
+      .skel-tr td {
+        padding-top: 10px;
+        padding-bottom: 10px;
+      }
+      .skel-cell {
+        display: inline-block;
+        height: 11px;
+        border-radius: 6px;
+        background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.2s infinite;
+        vertical-align: middle;
+      }
+
+      /* Spinner nativo accesible sobre <progress> indeterminado */
+      @property --arc-start {
+        syntax: "<angle>";
+        inherits: false;
+        initial-value: 0deg;
+      }
+      @property --arc-end {
+        syntax: "<angle>";
+        inherits: false;
+        initial-value: 0deg;
+      }
+      @property --progress-dash-animation {
+        syntax: "*";
+        inherits: false;
+        initial-value: , progress-dash 3s ease-in-out infinite;
+      }
+      progress.loading-spinner:indeterminate::-webkit-progress-bar {
+        display: none;
+        background: none;
+      }
+      progress.loading-spinner:indeterminate::-webkit-progress-value {
+        display: none;
+        background: none;
+      }
+      progress.loading-spinner:indeterminate::-moz-progress-bar {
+        display: none;
+        background: none;
+      }
+      progress.loading-spinner:indeterminate::slider-fill {
+        display: none;
+        background: none;
+      }
+      progress.loading-spinner:indeterminate {
+        --_from: calc(90deg + var(--arc-start, 0deg));
+        --_to: calc(90deg + var(--arc-end, 158deg));
+        --size: 16px;
+        --thickness: 2px;
+        --spinner-color: var(--accent);
+        --track-color: #dbeafe;
+        --spinner-duration: 1.2s;
+        --_used-spinner-duration: var(--spinner-duration);
+
+        position: relative;
+        flex-shrink: 0;
+        width: var(--size);
+        height: var(--size);
+        border-radius: 50%;
+        appearance: none;
+        background: conic-gradient(
+            from var(--_from),
+            var(--spinner-color) calc(var(--_to) - var(--_from)),
+            transparent 0
+          )
+          var(--track-color);
+        animation:
+          progress-spin var(--_used-spinner-duration) linear infinite
+          var(--progress-dash-animation, );
+      }
+      progress.loading-spinner[hidden] { display: none; }
+      @supports (background-clip: border-area) {
+        progress.loading-spinner:indeterminate {
+          background-clip: border-area;
+          border: var(--thickness) solid transparent;
+          background-origin: border-box;
+        }
+      }
+      @supports not (background-clip: border-area) {
+        progress.loading-spinner:indeterminate {
+          --clip-boundary: calc(100% - var(--thickness));
+          -webkit-mask-image: radial-gradient(
+            farthest-side,
+            transparent var(--clip-boundary),
+            black var(--clip-boundary)
+          );
+          mask-image: radial-gradient(
+            farthest-side,
+            transparent var(--clip-boundary),
+            black var(--clip-boundary)
+          );
+          border: 0;
+        }
+      }
+      @media (forced-colors: active) {
+        progress.loading-spinner:indeterminate {
+          forced-color-adjust: none;
+          --spinner-color: CanvasText;
+          --track-color: Canvas;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .skel, .skel-cell {
+          animation: none;
+        }
+        progress.loading-spinner:indeterminate {
+          --_used-spinner-duration: 6s;
+          --progress-dash-animation: ;
+          --arc-end: 158deg;
+        }
+      }
+      @keyframes progress-spin {
+        to { rotate: 1turn; }
+      }
+      @keyframes progress-dash {
+        from { --arc-start: 0deg; --arc-end: 3deg; }
+        50% { --arc-start: 100deg; --arc-end: 358deg; }
+        to { --arc-start: 360deg; --arc-end: 363deg; }
+      }
       @media (max-width: 780px) {
         .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .charts-grid, .insights-grid { grid-template-columns: 1fr; }
@@ -1374,6 +1495,7 @@
           '<div class="panel-head jobs-head">' +
             '<div class="jobs-title-wrap">' +
               '<h2 id="jobsPanelTitle" class="panel-title">Actividad reciente (últimos 20 trabajos)</h2>' +
+              '<progress id="jobsLoadingSpinner" class="loading-spinner" aria-label="Cargando trabajos de Auditoría" hidden></progress>' +
               '<span id="jobsScopeBadge" class="scope-badge" hidden></span>' +
             '</div>' +
             '<label class="toggle-all" for="showAllJobsChk">' +
@@ -1683,8 +1805,24 @@
         }
       }
 
+      function renderJobsSkeletonRows(count) {
+        const widths = [76, 120, 48, 145, 36, 70, 92, 48, 58];
+        const total = typeof count === 'number' && count > 0 ? count : 6;
+        let html = '';
+        for (let r = 0; r < total; r++) {
+          html += '<tr class="skel-tr" aria-hidden="true">';
+          for (let c = 0; c < widths.length; c++) {
+            const w = widths[c] + ((r % 2 === 1 && c === 3) ? -22 : 0);
+            html += '<td><span class="skel-cell" style="width:' + w + 'px"></span></td>';
+          }
+          html += '</tr>';
+        }
+        return html;
+      }
+
       function renderCompactMode() {
         const title = document.getElementById('jobsPanelTitle');
+        const spinner = document.getElementById('jobsLoadingSpinner');
         const badge = document.getElementById('jobsScopeBadge');
         const controls = document.getElementById('jobsControls');
         const wrap = document.getElementById('jobsTableWrap');
@@ -1692,6 +1830,7 @@
         const pager = document.getElementById('jobsPagination');
 
         if (title) title.textContent = 'Actividad reciente (últimos 20 trabajos)';
+        if (spinner) spinner.hidden = true;
         if (badge) {
           badge.textContent = '';
           badge.hidden = true;
@@ -1699,6 +1838,7 @@
         if (controls) controls.hidden = true;
         if (wrap) {
           wrap.classList.remove('is-scrollable');
+          wrap.setAttribute('aria-busy', 'false');
           wrap.scrollTop = 0;
         }
         if (pager) {
@@ -1716,6 +1856,7 @@
         allJobsError = '';
 
         const title = document.getElementById('jobsPanelTitle');
+        const spinner = document.getElementById('jobsLoadingSpinner');
         const badge = document.getElementById('jobsScopeBadge');
         const summary = document.getElementById('jobsFilterSummary');
         const tbody = document.getElementById('jobsTableBody');
@@ -1723,15 +1864,19 @@
         const wrap = document.getElementById('jobsTableWrap');
 
         if (title) title.textContent = 'Todos los trabajos de Auditoría';
+        if (spinner) spinner.hidden = false;
         if (badge) {
           badge.textContent = 'Cargando hoja...';
           badge.hidden = false;
         }
         if (summary) summary.textContent = 'Cargando registros completos de Auditoría...';
-        if (wrap) wrap.classList.remove('is-scrollable');
+        if (wrap) {
+          wrap.classList.remove('is-scrollable');
+          wrap.setAttribute('aria-busy', 'true');
+        }
         if (pager) pager.hidden = true;
         if (tbody) {
-          tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#64748b;padding:22px;">Cargando todos los trabajos de la hoja Auditoría...</td></tr>';
+          tbody.innerHTML = renderJobsSkeletonRows(6);
         }
         setJobsControlsDisabled(true);
 
@@ -1767,14 +1912,18 @@
       }
 
       function renderAllJobsLoadError(msg) {
+        const spinner = document.getElementById('jobsLoadingSpinner');
         const badge = document.getElementById('jobsScopeBadge');
         const summary = document.getElementById('jobsFilterSummary');
+        const wrap = document.getElementById('jobsTableWrap');
         const tbody = document.getElementById('jobsTableBody');
         const pager = document.getElementById('jobsPagination');
         setJobsControlsDisabled(false);
         const exportBtn = document.getElementById('jobsExportCsvBtn');
         if (exportBtn) exportBtn.disabled = true;
+        if (spinner) spinner.hidden = true;
         if (badge) badge.hidden = true;
+        if (wrap) wrap.setAttribute('aria-busy', 'false');
         if (summary) summary.textContent = 'Error al cargar el histórico completo.';
         if (pager) pager.hidden = true;
         if (tbody) {
@@ -1895,6 +2044,7 @@
         if (!jobsUiState.showAll || allJobsCache === null) return;
 
         const title = document.getElementById('jobsPanelTitle');
+        const spinner = document.getElementById('jobsLoadingSpinner');
         const badge = document.getElementById('jobsScopeBadge');
         const summary = document.getElementById('jobsFilterSummary');
         const clearBtn = document.getElementById('jobsClearFiltersBtn');
@@ -1902,6 +2052,9 @@
         const wrap = document.getElementById('jobsTableWrap');
         const tbody = document.getElementById('jobsTableBody');
         const pager = document.getElementById('jobsPagination');
+
+        if (spinner) spinner.hidden = true;
+        if (wrap) wrap.setAttribute('aria-busy', 'false');
 
         const totalAll = allJobsCache.length;
         const filtered = getFilteredAuditJobs();

@@ -14,7 +14,7 @@ function onOpen() {
     .addItem('🧹 Purgar archivos temporales ahora', 'menuPurgeTempFiles')
     .addItem('⏱️ Trigger diario de mantenimiento', 'menuInstallMaintenanceTrigger')
     .addItem('🔍 Verificar formatos Drive API', 'menuCheckDriveImportFormats')
-    .addItem('🔍 Verificar listas de acceso y grupos', 'menuCheckAccessLists');
+    .addItem('🛡️ Gestionar listas de acceso y grupos', 'menuCheckAccessLists');
 
   ui.createMenu('📄 Doc2PDF')
     .addItem('🌐 Abrir WebApp', 'openWebAppDialog')
@@ -582,13 +582,28 @@ function menuCheckDriveImportFormats() {
 }
 
 /**
- * Acción de menú: inspecciona en vivo las listas negra y blanca en un modal HTML de diagnóstico.
+ * Acción de menú: abre el gestor y diagnóstico en vivo de las listas negra y blanca.
  */
 function menuCheckAccessLists() {
-  assertSpreadsheetAdmin_('menuCheckAccessLists');
+  const adminEmail = assertSpreadsheetAdmin_('menuCheckAccessLists');
   const cfg = getConfig_(true);
   const report = inspectAccessLists_(cfg);
-  openStyledModalDialog_('AccessCheckDialog', { report: report }, 620, 600, cfg);
+  const reportJson = JSON.stringify(report)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+  openStyledModalDialog_(
+    'AccessCheckDialog',
+    {
+      report: report,
+      reportJson: reportJson,
+      dialogToken: createAdminDialogToken_(adminEmail)
+    },
+    660,
+    640,
+    cfg
+  );
 }
 
 /* ============================================================================
@@ -610,6 +625,35 @@ function apiGetAuditJobs(dialogToken) {
     assertAdminDialogCall_(dialogToken, 'apiGetAuditJobs');
     const data = getAllAuditJobs_();
     return { success: true, data: data };
+  } catch (e) {
+    return { success: false, code: e.code || 'ADMIN_ERROR', error: e.message };
+  }
+}
+
+function apiSaveAccessLists(payload, dialogToken) {
+  try {
+    assertAdminDialogCall_(dialogToken, 'apiSaveAccessLists');
+    const p = payload || {};
+    if (p.verifyOnly === true) {
+      clearConfigCache_();
+      const freshCfg = getConfig_(true);
+      const report = inspectAccessLists_(freshCfg);
+      return {
+        success: true,
+        saved: false,
+        report: report,
+        savedBlacklist: freshCfg.LISTA_NEGRA_USUARIOS || [],
+        savedWhitelist: freshCfg.LISTA_BLANCA_USUARIOS || []
+      };
+    }
+    const res = saveAccessLists_(p.blacklist, p.whitelist);
+    return {
+      success: true,
+      saved: true,
+      report: res.report,
+      savedBlacklist: res.savedBlacklist,
+      savedWhitelist: res.savedWhitelist
+    };
   } catch (e) {
     return { success: false, code: e.code || 'ADMIN_ERROR', error: e.message };
   }

@@ -39,7 +39,7 @@ Microservicio web ligero e interno para **Google Workspace** desarrollado ínteg
   - Solo 2 pestañas optimizadas: `Ajustes` (con casillas `SI`/`NO`, desplegables, validaciones numéricas estrictas, ajuste multilínea y autoanchura) y `Auditoría` (filtros activos en todas las columnas y cabecera calibrada).
   - Recorte automático de filas y columnas vacías sobrantes al inicializar o reparar (avisando explícitamente del restablecimiento de `Ajustes` y respetando filas/columnas con datos en `Auditoría`).
   - Diálogo modal HTML rico **Resumen y analítica** (KPIs, actividad diaria SVG, donut por familias, top extensiones, usuarios activos clicables y tabla reciente con opción para desplegar toda la hoja `Auditoría`, buscar, filtrar por usuario/familia/estado/origen, paginar y exportar a **CSV**).
-  - Modales HTML de mantenimiento con estética unificada: **Trigger diario de mantenimiento** (comprueba estado, activa o desactiva), **Purgar archivos temporales ahora** (huérfanos &gt; 30 min o todos), **Verificar formatos Drive API** (acordeón por familias) y **Verificar listas de acceso y grupos** (resolución en vivo, leyenda `g:`, detección *Fail-Closed* y solapamientos).
+  - Modales HTML de mantenimiento con estética unificada: **Trigger diario de mantenimiento** (comprueba estado, activa o desactiva), **Purgar archivos temporales ahora** (huérfanos &gt; 30 min o todos), **Verificar formatos Drive API** (acordeón por familias) y **Gestionar listas de acceso y grupos** (edición directa de usuarios/grupos con alternancia `g:`, validación y diagnóstico en vivo de permisos y solapamientos).
   - Modal **Acerca de Doc2PDF** de atribución con banner gráfico WebP embebido en Base64 desde el menú personalizado.
 
 ---
@@ -90,11 +90,13 @@ La raíz del repositorio coincide con el directorio raíz de `clasp` (`rootDir: 
 ├── DialogStyles.html            # Hoja de estilos compartida para diálogos de mantenimiento
 ├── AboutDialog.html             # Diálogo modal "Acerca de Doc2PDF" con banner Base64 WebP
 ├── InitDialog.html              # Confirmación de reinicialización con aviso de borrado/recorte
-├── AccessCheckDialog.html       # Diagnóstico visual de listas negra/blanca, Google Groups y leyenda g:
+├── AccessCheckDialog.html       # Gestor y diagnóstico en vivo de listas negra/blanca y Google Groups
 ├── FormatsCheckDialog.html      # Verificación desplegable por familias de formatos en Drive API v3
 ├── TriggerDialog.html           # Estado, activación y desactivación del trigger diario
 ├── PurgeTempDialog.html         # Purga selectiva de temporales (huérfanos > 30 min o total)
-└── DeployDialog.html            # Asistente paso a paso para guardar la URL de WebApp
+├── DeployDialog.html            # Asistente paso a paso para guardar la URL de WebApp
+└── tests/
+    └── verify_doc2pdf.js        # Suite automatizada de pruebas funcionales y de seguridad en Node.js sin dependencias
 ```
 
 ---
@@ -130,7 +132,7 @@ La raíz del repositorio coincide con el directorio raíz de `clasp` (`rootDir: 
 
 Para validar la experiencia de un usuario estándar (modo mantenimiento, listas blancas/negras, restricción de dominio o cuota diaria) sin necesitar una segunda cuenta en el dominio, [Auth.gs](Auth.gs) incluye dos constantes de simulación apagadas por defecto (`DEV_IMPERSONATE_ENABLED_ = false` y `DEV_IMPERSONATE_EMAIL_ = ''`):
 
-- **Activación temporal en entorno `/dev`:** cambia ambas constantes en tu copia local / editor de Apps Script hacia un correo de prueba de tu dominio, abre la implementación de pruebas (`/dev`) y **devuélvelas a `false` / `''` antes de publicar `/exec` o confirmar en Git** (la suite de verificación falla si quedan activas).
+- **Activación temporal en entorno `/dev`:** cambia ambas constantes en tu copia local / editor de Apps Script hacia un correo de prueba de tu dominio, abre la implementación de pruebas (`/dev`) y **devuélvelas a `false` / `''` antes de publicar `/exec` o confirmar en Git** (la suite `node tests/verify_doc2pdf.js` falla si quedan activas).
 - **Salvaguardas integradas:**
   - **Exclusivo de la cuenta desplegadora:** solo surte efecto si la sesión real coincide con `Session.getEffectiveUser()` (los co-editores de la hoja y usuarios normales no pueden suplantar identidades).
   - **Banner permanente y trazabilidad:** la WebApp muestra un aviso rojo superior en todo momento (incluso en pantallas de bloqueo) y `Auditoría` registra la fila como `<simulado> [simulado por <desplegador>]`.
@@ -204,7 +206,7 @@ Tanto `LISTA_NEGRA_USUARIOS` como `LISTA_BLANCA_USUARIOS` aceptan indistintament
    - La comprobación usa el servicio nativo `GroupsApp.getGroupByEmail(correo).hasUser(email)` bajo el scope `https://www.googleapis.com/auth/groups`, sin requerir **Admin SDK / Directory API** ni privilegios de Superadministrador sobre toda la consola Workspace.
    - **Solo verifica membresía directa:** si un grupo A contiene anidado un grupo B, la pertenencia a B **no** se hereda automáticamente; añade explícitamente el grupo B si necesitas incluirlo.
    - **Visibilidad obligatoria para la cuenta desplegadora:** para que `GroupsApp` pueda evaluar un grupo sin errores, la cuenta desplegadora (`executeAs: "USER_DEPLOYING"`) debe poder localizar el grupo en el directorio y tener permiso de lectura sobre su lista de miembros (**Google Groups → Configuración del grupo → *Quién puede ver a los miembros***).
-   - **Diagnóstico en Sheets:** tras configurar grupos o cuentas, ejecuta **`📄 Doc2PDF → 🛠️ Mantenimiento → 🔍 Verificar listas de acceso y grupos`** para validar en vivo qué entradas resuelven como grupo, detectar faltas de permisos o advertir sobre solapamientos antes de publicar cambios.
+   - **Gestión y diagnóstico en Sheets:** desde **`📄 Doc2PDF → 🛠️ Mantenimiento → 🛡️ Gestionar listas de acceso y grupos`** puedes editar ambas listas en línea (con alternancia rápida de `g:`), guardar en `Ajustes` con invalidación inmediata de caché y comprobar en vivo qué entradas resuelven como grupo, detectar faltas de permisos o advertir sobre solapamientos.
 
 #### Flujo de evaluación y optimizaciones
 
