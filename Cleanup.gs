@@ -224,22 +224,62 @@ function purgeOrphanTempFiles_(maxAgeMinutes) {
 }
 
 /**
- * Comprueba si el trigger diario de mantenimiento está instalado.
- * @return {boolean}
+ * Obtiene el estado actual del trigger diario de mantenimiento (`runDailyMaintenance`).
+ * @return {{installed: boolean, count: number, handler: string, scheduleLabel: string, timeZone: string}}
  */
-function hasMaintenanceTrigger_() {
+function getMaintenanceTriggerStatus_() {
+  let timeZone = 'Europe/Madrid';
+  try {
+    timeZone = Session.getScriptTimeZone() || timeZone;
+  } catch (e) {}
+
+  let count = 0;
   try {
     const triggers = ScriptApp.getProjectTriggers();
     for (let i = 0; i < triggers.length; i++) {
       if (triggers[i].getHandlerFunction() === 'runDailyMaintenance') {
-        return true;
+        count++;
       }
     }
-    return false;
   } catch (e) {
     console.warn('No se pudieron inspeccionar los triggers:', e.message);
-    return false;
   }
+
+  return {
+    installed: count > 0,
+    count: count,
+    handler: 'runDailyMaintenance',
+    scheduleLabel: 'Diario (03:00–04:00)',
+    timeZone: timeZone
+  };
+}
+
+/**
+ * Comprueba si el trigger diario de mantenimiento está instalado.
+ * @return {boolean}
+ */
+function hasMaintenanceTrigger_() {
+  return getMaintenanceTriggerStatus_().installed;
+}
+
+/**
+ * Elimina todos los triggers programados para `runDailyMaintenance`.
+ * @return {{installed: boolean, removed: number, handler: string}}
+ */
+function removeMaintenanceTrigger_() {
+  let removed = 0;
+  const triggers = ScriptApp.getProjectTriggers();
+  for (let i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'runDailyMaintenance') {
+      ScriptApp.deleteTrigger(triggers[i]);
+      removed++;
+    }
+  }
+  return {
+    installed: false,
+    removed: removed,
+    handler: 'runDailyMaintenance'
+  };
 }
 
 /**

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <title>Verificación de formatos Drive API | <?= appName ?></title>
+    <?!= include_('DialogStyles'); ?>
+    <style>
+      :root { --accent: <?= accentColor ?>; }
+    </style>
+  </head>
+  <body>
+    <?
+      const totalEnabled = (report && report.totalEnabled) || 0;
+      const verifiedCount = (report && report.verifiedCount) || 0;
+      const warningCount = (report && report.warningCount) || 0;
+      const families = (report && report.families) || [];
+    ?>
+
+    <header class="hdr">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <polyline points="9 15 11 17 15 13"/>
+      </svg>
+      <h1>Formatos soportados (Drive API v3)</h1>
+    </header>
+
+    <main class="body">
+      <div class="kpi-row kpi-row-3">
+        <div class="kpi-card">
+          <span class="kpi-val is-ok"><?= verifiedCount ?></span>
+          <span class="kpi-lbl">Confirmados</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val <?= warningCount > 0 ? 'is-warn' : '' ?>"><?= warningCount ?></span>
+          <span class="kpi-lbl">No reportados</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val"><?= totalEnabled ?></span>
+          <span class="kpi-lbl">Habilitados en Ajustes</span>
+        </div>
+      </div>
+
+      <? if (warningCount > 0) { ?>
+        <div class="notice notice-warn">
+          <div class="notice-title"><?= warningCount ?> formato(s) no devuelto(s) por Drive.About.get()</div>
+          <div>
+            Es posible que algún tipo MIME secundario no figure en el mapa directo de <code>importFormats</code> del tenant actual o esté restringido en la cuenta desplegadora.
+          </div>
+        </div>
+      <? } else { ?>
+        <div class="notice notice-ok">
+          <div class="notice-title">Todos los formatos habilitados están confirmados</div>
+          <div>
+            Drive API v3 reporta importación nativa disponible para las <?= totalEnabled ?> extensiones activas actualmente en <b>Ajustes</b>.
+          </div>
+        </div>
+      <? } ?>
+
+      <? for (let f = 0; f < families.length; f++) {
+           const fam = families[f];
+           if (!fam.items || fam.items.length === 0) continue; ?>
+        <section class="list-card">
+          <div class="list-head">
+            <h2><?= fam.label ?> (<?= fam.verified ?>/<?= fam.items.length ?>)</h2>
+            <span class="list-sub"><?= fam.verified === fam.items.length ? 'Completa' : 'Revisar avisos' ?></span>
+          </div>
+          <ul class="entry-list" role="list">
+            <? for (let i = 0; i < fam.items.length; i++) {
+                 const item = fam.items[i]; ?>
+              <li class="entry-row">
+                <div class="entry-main">
+                  <span class="entry-email">.<?= item.ext ?></span>
+                  <span class="entry-detail">
+                    <?= item.sourceMime ?><?= item.maxImportMb ? (' · Máx. importación: ' + item.maxImportMb + ' MB') : '' ?>
+                  </span>
+                </div>
+                <span class="status-badge <?= item.ok ? 'badge-ok' : 'badge-warn' ?>">
+                  <?= item.ok ? 'Confirmado' : 'No reportado' ?>
+                </span>
+              </li>
+            <? } ?>
+          </ul>
+        </section>
+      <? } ?>
+    </main>
+
+    <footer class="footer-bar">
+      <button type="button" class="btn-close" onclick="google.script.host.close()">Cerrar</button>
+    </footer>
+  </body>
+</html>

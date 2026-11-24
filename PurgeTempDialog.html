@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <title>Purgar archivos temporales | <?= appName ?></title>
+    <?!= include_('DialogStyles'); ?>
+    <style>
+      :root { --accent: <?= accentColor ?>; }
+    </style>
+  </head>
+  <body>
+    <header class="hdr">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="3 6 5 6 21 6"/>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+      </svg>
+      <h1>Purgar archivos temporales</h1>
+    </header>
+
+    <main class="body">
+      <div class="kpi-row kpi-row-2">
+        <div class="kpi-card">
+          <span class="kpi-val" id="tempCountVal"><?= initialCount ?></span>
+          <span class="kpi-lbl">Archivos actuales en carpeta</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val is-compact"><?= folderName ?></span>
+          <span class="kpi-lbl">Carpeta Drive</span>
+        </div>
+      </div>
+
+      <fieldset class="radio-group">
+        <legend>Alcance de la purga</legend>
+        <label class="radio-opt" for="optOrphans">
+          <input type="radio" id="optOrphans" name="purgeScope" value="30" checked>
+          <span class="radio-opt-text">
+            <span class="radio-opt-title">Solo huérfanos (&gt; 30 min) · Recomendado</span>
+            <span class="radio-opt-desc">Respeta archivos recientes de conversiones que puedan estar en curso en este momento.</span>
+          </span>
+        </label>
+        <label class="radio-opt" for="optAll">
+          <input type="radio" id="optAll" name="purgeScope" value="0">
+          <span class="radio-opt-text">
+            <span class="radio-opt-title">Todos los archivos (0 min)</span>
+            <span class="radio-opt-desc">Borra permanentemente todo el contenido de la carpeta temporal; úsalo solo sin usuarios convirtiendo.</span>
+          </span>
+        </label>
+      </fieldset>
+
+      <div id="statusMsg" class="status-msg" role="status" aria-live="polite">
+        <progress id="purgeSpinner" class="loading-spinner" aria-label="Purgando archivos temporales" hidden></progress>
+        <span id="statusText"></span>
+      </div>
+    </main>
+
+    <footer class="footer-bar is-between">
+      <button type="button" id="closeBtn" class="btn-outline" onclick="google.script.host.close()">Cerrar</button>
+      <button type="button" id="purgeBtn" class="btn btn-primary" onclick="executePurge()">Ejecutar purga</button>
+    </footer>
+
+    <script>
+      const DIALOG_TOKEN = '<?= dialogToken ?>';
+
+      function executePurge() {
+        const checked = document.querySelector('input[name="purgeScope"]:checked');
+        const maxAge = checked ? Number(checked.value) : 30;
+        const purgeBtn = document.getElementById('purgeBtn');
+        const closeBtn = document.getElementById('closeBtn');
+        const radios = document.querySelectorAll('input[name="purgeScope"]');
+        const spinner = document.getElementById('purgeSpinner');
+        const statusEl = document.getElementById('statusMsg');
+        const statusText = document.getElementById('statusText');
+
+        purgeBtn.disabled = true;
+        closeBtn.disabled = true;
+        radios.forEach(function (r) { r.disabled = true; });
+        purgeBtn.textContent = 'Purgando...';
+        spinner.hidden = false;
+        statusEl.className = 'status-msg';
+        statusText.textContent = 'Eliminando archivos temporales...';
+
+        function resetControls() {
+          spinner.hidden = true;
+          purgeBtn.disabled = false;
+          closeBtn.disabled = false;
+          radios.forEach(function (r) { r.disabled = false; });
+          purgeBtn.textContent = 'Ejecutar purga';
+        }
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            resetControls();
+            if (res && res.success && res.result) {
+              const r = res.result;
+              if (typeof res.remaining === 'number') {
+                document.getElementById('tempCountVal').textContent = String(res.remaining);
+              }
+              statusEl.className = 'status-msg ' + (r.errors > 0 ? 'status-err' : 'status-ok');
+              statusText.textContent =
+                'Inspeccionados: ' + r.scanned + ' · Eliminados: ' + r.deleted + ' · Errores: ' + r.errors;
+            } else {
+              statusEl.className = 'status-msg status-err';
+              statusText.textContent = (res && res.error) || 'Error desconocido al purgar temporales.';
+            }
+          })
+          .withFailureHandler(function (err) {
+            resetControls();
+            statusEl.className = 'status-msg status-err';
+            statusText.textContent = (err && err.message) || 'Error al comunicarse con Apps Script.';
+          })
+          .apiPurgeTempFilesFromDialog(maxAge, DIALOG_TOKEN);
+      }
+    </script>
+  </body>
+</html>

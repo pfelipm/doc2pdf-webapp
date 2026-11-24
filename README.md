@@ -82,9 +82,13 @@ La raíz del repositorio coincide con el directorio raíz de `clasp` (`rootDir: 
 ├── Styles.html              # CSS adaptativo con soporte light-dark() y fallbacks
 ├── ClientScript.html        # Cola, drag & drop, chunking y vista previa PDF
 ├── DashboardDialog.html     # Diálogo modal de Resumen y analítica (SVG nativo)
+├── DialogStyles.html        # Hoja de estilos compartida para diálogos de mantenimiento
 ├── AboutDialog.html         # Diálogo modal "Acerca de Doc2PDF" con banner Base64 WebP
 ├── InitDialog.html          # Confirmación de reinicialización con aviso de borrado/recorte
 ├── AccessCheckDialog.html   # Diagnóstico visual de listas negra/blanca y Google Groups
+├── FormatsCheckDialog.html  # Verificación agrupada de formatos soportados en Drive API v3
+├── TriggerDialog.html       # Estado, activación y desactivación del trigger diario
+├── PurgeTempDialog.html     # Purga selectiva de temporales (huérfanos > 30 min o total)
 └── DeployDialog.html        # Asistente paso a paso para guardar la URL de WebApp
 ```
 

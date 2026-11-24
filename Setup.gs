@@ -12,7 +12,7 @@ function onOpen() {
   const maintenanceMenu = ui.createMenu('🛠️ Mantenimiento')
     .addItem('🔄 Limpiar caché de ajustes', 'menuClearConfigCache')
     .addItem('🧹 Purgar archivos temporales ahora', 'menuPurgeTempFiles')
-    .addItem('⏱️ Instalar trigger diario de limpieza', 'menuInstallMaintenanceTrigger')
+    .addItem('⏱️ Trigger diario de mantenimiento', 'menuInstallMaintenanceTrigger')
     .addItem('🔍 Verificar formatos Drive API', 'menuCheckDriveImportFormats')
     .addItem('🔍 Verificar listas de acceso y grupos', 'menuCheckAccessLists');
 
@@ -273,7 +273,7 @@ function openWebAppDialog() {
             color: #0f172a;
           }
           .hdr {
-            background: ${safeAccent};
+            background: linear-gradient(135deg, ${safeAccent} 0%, #0f2b5b 100%);
             color: #fff;
             padding: 14px 20px;
             display: flex;
@@ -408,60 +408,155 @@ function menuClearConfigCache() {
 }
 
 /**
- * Acción de menú: purga manualmente todos los archivos de la carpeta temporal.
+ * Renderiza y abre un diálogo modal HTML homogéneo desde una plantilla.
+ * Privada con sufijo "_" para no exponerla en google.script.run.
+ * @param {string} templateName
+ * @param {Object=} templateVars
+ * @param {number=} width
+ * @param {number=} height
+ * @param {Object=} configOpt
+ */
+function openStyledModalDialog_(templateName, templateVars, width, height, configOpt) {
+  const cfg = configOpt || getConfig_();
+  const template = HtmlService.createTemplateFromFile(templateName);
+  template.appName = cfg.NOMBRE_APP;
+  template.accentColor = cfg.COLOR_ACENTO;
+  if (templateVars) {
+    Object.keys(templateVars).forEach(function (k) {
+      template[k] = templateVars[k];
+    });
+  }
+  const html = template.evaluate().setWidth(width || 560).setHeight(height || 520);
+  SpreadsheetApp.getUi().showModalDialog(html, ' ');
+}
+
+/**
+ * Acción de menú: abre el modal HTML de purga manual de la carpeta temporal.
  */
 function menuPurgeTempFiles() {
-  assertSpreadsheetAdmin_('menuPurgeTempFiles');
-  const res = purgeOrphanTempFiles_(0);
-  SpreadsheetApp.getUi().alert(
-    'Purga de temporales completada',
-    'Archivos inspeccionados: ' + res.scanned + '\nArchivos eliminados permanentemente: ' + res.deleted + '\nErrores: ' + res.errors,
-    SpreadsheetApp.getUi().ButtonSet.OK
+  const adminEmail = assertSpreadsheetAdmin_('menuPurgeTempFiles');
+  const cfg = getConfig_();
+  const folderId = getOrCreateTempFolder_(cfg);
+  let folderName = TEMP_FOLDER_DEFAULT_NAME;
+  try {
+    const meta = Drive.Files.get(folderId, { fields: 'name', supportsAllDrives: true });
+    if (meta && meta.name) folderName = meta.name;
+  } catch (e) {}
+
+  openStyledModalDialog_(
+    'PurgeTempDialog',
+    {
+      initialCount: countTempFiles_(cfg),
+      folderName: folderName,
+      dialogToken: createAdminDialogToken_(adminEmail)
+    },
+    540,
+    500,
+    cfg
   );
 }
 
 /**
- * Acción de menú: instala el trigger diario de mantenimiento.
+ * Acción de menú: abre el modal HTML de estado, activación y desactivación del trigger diario.
  */
 function menuInstallMaintenanceTrigger() {
-  assertSpreadsheetAdmin_('menuInstallMaintenanceTrigger');
-  installMaintenanceTrigger_();
-  SpreadsheetApp.getUi().alert(
-    'Trigger instalado',
-    'Se ha programado el mantenimiento diario automático (03:00–04:00 Europe/Madrid) para purgar temporales huérfanos y aplicar la retención de Auditoría.',
-    SpreadsheetApp.getUi().ButtonSet.OK
+  const adminEmail = assertSpreadsheetAdmin_('menuInstallMaintenanceTrigger');
+  const cfg = getConfig_();
+  openStyledModalDialog_(
+    'TriggerDialog',
+    {
+      status: getMaintenanceTriggerStatus_(),
+      retentionDays: cfg.RETENCION_AUDITORIA_DIAS,
+      dialogToken: createAdminDialogToken_(adminEmail)
+    },
+    540,
+    500,
+    cfg
   );
 }
 
 /**
- * Acción de menú: consulta Drive.About.get() para verificar formatos soportados en el tenant actual.
+ * Obtiene y agrupa por familia el informe de formatos soportados según Drive.About.get().
+ * Privada con sufijo "_" para no exponerla en google.script.run.
+ * @param {Object=} configOpt
+ * @return {{totalEnabled: number, verifiedCount: number, warningCount: number, families: Array<Object>}}
  */
-function menuCheckDriveImportFormats() {
-  assertSpreadsheetAdmin_('menuCheckDriveImportFormats');
+function getDriveImportFormatsReport_(configOpt) {
+  const cfg = configOpt || getConfig_();
   const about = Drive.About.get({ fields: 'importFormats, maxImportSizes' });
   const importFormats = (about && about.importFormats) || {};
+  const maxImportSizes = (about && about.maxImportSizes) || {};
+
   const normalizedImportFormats = {};
   Object.keys(importFormats).forEach(function (mimeKey) {
     normalizedImportFormats[String(mimeKey).toLowerCase()] = importFormats[mimeKey];
   });
-  const cfg = getConfig_();
+
+  const normalizedMaxSizes = {};
+  Object.keys(maxImportSizes).forEach(function (mimeKey) {
+    const bytes = Number(maxImportSizes[mimeKey]);
+    if (isFinite(bytes) && bytes > 0) {
+      normalizedMaxSizes[String(mimeKey).toLowerCase()] = Math.round(bytes / (1024 * 1024));
+    }
+  });
+
+  const familyDefs = [
+    { key: 'DOCUMENTOS', label: 'Documentos de texto' },
+    { key: 'HOJAS', label: 'Hojas de cálculo' },
+    { key: 'PRESENTACIONES', label: 'Presentaciones' },
+    { key: 'TEXTO', label: 'Texto y marcado' }
+  ];
+  const bucketMap = {};
+  for (let f = 0; f < familyDefs.length; f++) {
+    bucketMap[familyDefs[f].key] = {
+      key: familyDefs[f].key,
+      label: familyDefs[f].label,
+      verified: 0,
+      items: []
+    };
+  }
+
   const enabled = getEnabledFormats_(cfg);
-  const lines = [];
-  let verified = 0;
+  let verifiedCount = 0;
 
   for (let i = 0; i < enabled.length; i++) {
     const fmt = enabled[i];
-    const targets = normalizedImportFormats[String(fmt.sourceMime || '').toLowerCase()] || [];
+    const mimeLower = String(fmt.sourceMime || '').toLowerCase();
+    const targets = normalizedImportFormats[mimeLower] || [];
     const ok = targets.indexOf(fmt.targetGoogleMime) !== -1;
-    if (ok) verified++;
-    lines.push((ok ? '✅ ' : '⚠️ ') + '.' + fmt.ext + ' (' + fmt.sourceMime + ')');
+    if (ok) verifiedCount++;
+
+    const bucket = bucketMap[fmt.family] || bucketMap.DOCUMENTOS;
+    if (ok) bucket.verified++;
+    bucket.items.push({
+      ext: fmt.ext,
+      sourceMime: fmt.sourceMime,
+      targetGoogleMime: fmt.targetGoogleMime,
+      ok: ok,
+      maxImportMb: normalizedMaxSizes[mimeLower] || null
+    });
   }
 
-  SpreadsheetApp.getUi().alert(
-    'Verificación Drive API v3 (' + verified + '/' + enabled.length + ' confirmados)',
-    lines.join('\n'),
-    SpreadsheetApp.getUi().ButtonSet.OK
-  );
+  const families = familyDefs
+    .map(function (def) { return bucketMap[def.key]; })
+    .filter(function (fam) { return fam.items.length > 0; });
+
+  return {
+    totalEnabled: enabled.length,
+    verifiedCount: verifiedCount,
+    warningCount: enabled.length - verifiedCount,
+    families: families
+  };
+}
+
+/**
+ * Acción de menú: consulta Drive.About.get() y abre el modal HTML de formatos soportados.
+ */
+function menuCheckDriveImportFormats() {
+  assertSpreadsheetAdmin_('menuCheckDriveImportFormats');
+  const cfg = getConfig_();
+  const report = getDriveImportFormatsReport_(cfg);
+  openStyledModalDialog_('FormatsCheckDialog', { report: report }, 620, 600, cfg);
 }
 
 /**
@@ -471,13 +566,7 @@ function menuCheckAccessLists() {
   assertSpreadsheetAdmin_('menuCheckAccessLists');
   const cfg = getConfig_(true);
   const report = inspectAccessLists_(cfg);
-
-  const template = HtmlService.createTemplateFromFile('AccessCheckDialog');
-  template.appName = cfg.NOMBRE_APP;
-  template.accentColor = cfg.COLOR_ACENTO;
-  template.report = report;
-  const html = template.evaluate().setWidth(620).setHeight(600);
-  SpreadsheetApp.getUi().showModalDialog(html, ' ');
+  openStyledModalDialog_('AccessCheckDialog', { report: report }, 620, 600, cfg);
 }
 
 /* ============================================================================
@@ -494,11 +583,20 @@ function apiGetDashboardAnalytics(daysFilter, dialogToken) {
   }
 }
 
-function apiPurgeTempFilesFromDialog(dialogToken) {
+function apiPurgeTempFilesFromDialog(arg1, arg2) {
   try {
+    const hasTwoArgs = typeof arg2 !== 'undefined';
+    const dialogToken = hasTwoArgs ? arg2 : arg1;
+    const rawAge = hasTwoArgs ? Number(arg1) : 0;
+    const maxAgeMinutes = (isFinite(rawAge) && rawAge >= 0) ? rawAge : 30;
     assertAdminDialogCall_(dialogToken, 'apiPurgeTempFilesFromDialog');
-    const res = purgeOrphanTempFiles_(0);
-    return { success: true, result: res };
+    const res = purgeOrphanTempFiles_(maxAgeMinutes);
+    return {
+      success: true,
+      result: res,
+      remaining: countTempFiles_(),
+      maxAgeMinutes: maxAgeMinutes
+    };
   } catch (e) {
     return { success: false, code: e.code || 'ADMIN_ERROR', error: e.message };
   }
@@ -508,7 +606,17 @@ function apiInstallTriggerFromDialog(dialogToken) {
   try {
     assertAdminDialogCall_(dialogToken, 'apiInstallTriggerFromDialog');
     const res = installMaintenanceTrigger_();
-    return { success: true, result: res };
+    return { success: true, result: res, status: getMaintenanceTriggerStatus_() };
+  } catch (e) {
+    return { success: false, code: e.code || 'ADMIN_ERROR', error: e.message };
+  }
+}
+
+function apiRemoveTriggerFromDialog(dialogToken) {
+  try {
+    assertAdminDialogCall_(dialogToken, 'apiRemoveTriggerFromDialog');
+    const res = removeMaintenanceTrigger_();
+    return { success: true, result: res, status: getMaintenanceTriggerStatus_() };
   } catch (e) {
     return { success: false, code: e.code || 'ADMIN_ERROR', error: e.message };
   }

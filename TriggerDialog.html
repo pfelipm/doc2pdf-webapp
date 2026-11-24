@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <title>Trigger diario de mantenimiento | <?= appName ?></title>
+    <?!= include_('DialogStyles'); ?>
+    <style>
+      :root { --accent: <?= accentColor ?>; }
+    </style>
+  </head>
+  <body>
+    <header class="hdr">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"/>
+        <polyline points="12 7 12 12 15.5 14"/>
+      </svg>
+      <h1>Trigger diario de mantenimiento</h1>
+    </header>
+
+    <main class="body">
+      <section class="list-card">
+        <div class="list-head">
+          <h2>Estado actual</h2>
+          <span id="stateBadge" class="status-badge <?= status.installed ? 'badge-ok' : 'badge-muted' ?>">
+            <?= status.installed ? 'Activo' : 'Inactivo' ?>
+          </span>
+        </div>
+        <ul class="entry-list" role="list">
+          <li class="entry-row">
+            <div class="entry-main">
+              <span class="entry-email">Estado en Apps Script</span>
+              <span id="countText" class="entry-detail">
+                <?= status.installed ? (status.count + ' trigger' + (status.count === 1 ? '' : 's') + ' activo' + (status.count === 1 ? '' : 's') + ' configurado' + (status.count === 1 ? '' : 's')) : 'No hay ningún trigger diario instalado actualmente' ?>
+              </span>
+            </div>
+          </li>
+          <li class="entry-row">
+            <div class="entry-main">
+              <span class="entry-email">Horario programado</span>
+              <span class="entry-detail"><?= status.scheduleLabel ?> (<?= status.timeZone ?>)</span>
+            </div>
+          </li>
+          <li class="entry-row">
+            <div class="entry-main">
+              <span class="entry-email">Función ejecutada</span>
+              <span class="entry-detail"><code><?= status.handler ?></code></span>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <section class="list-card">
+        <div class="list-head">
+          <h2>Tareas automáticas incluidas</h2>
+        </div>
+        <ul class="entry-list" role="list">
+          <li class="entry-row">
+            <div class="entry-main">
+              <span class="entry-email">Carpeta temporal _Doc2PDF_Temp</span>
+              <span class="entry-detail">Purga permanente de archivos huérfanos con más de 30 minutos de antigüedad.</span>
+            </div>
+          </li>
+          <li class="entry-row">
+            <div class="entry-main">
+              <span class="entry-email">Retención en pestaña Auditoría</span>
+              <span class="entry-detail">
+                <?= retentionDays > 0 ? ('Conserva los últimos ' + retentionDays + ' días (ajustable mediante RETENCION_AUDITORIA_DIAS).') : 'Conservación indefinida (RETENCION_AUDITORIA_DIAS = 0).' ?>
+              </span>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <div id="statusMsg" class="status-msg" role="status" aria-live="polite">
+        <progress id="trigSpinner" class="loading-spinner" aria-label="Actualizando trigger diario" hidden></progress>
+        <span id="statusText"></span>
+      </div>
+    </main>
+
+    <footer class="footer-bar is-between">
+      <div class="footer-actions">
+        <button type="button" id="installBtn" class="btn btn-primary" onclick="installTrigger()">
+          <?= status.installed ? 'Reinstalar (03:00)' : 'Activar trigger diario' ?>
+        </button>
+        <button type="button" id="removeBtn" class="btn btn-danger-outline" onclick="removeTrigger()" <?= status.installed ? '' : 'hidden' ?>>
+          Desactivar trigger
+        </button>
+      </div>
+      <button type="button" id="closeBtn" class="btn-outline" onclick="google.script.host.close()">Cerrar</button>
+    </footer>
+
+    <script>
+      const DIALOG_TOKEN = '<?= dialogToken ?>';
+
+      function setBusy(busy, message) {
+        const installBtn = document.getElementById('installBtn');
+        const removeBtn = document.getElementById('removeBtn');
+        const closeBtn = document.getElementById('closeBtn');
+        const spinner = document.getElementById('trigSpinner');
+        const statusEl = document.getElementById('statusMsg');
+        const statusText = document.getElementById('statusText');
+
+        installBtn.disabled = busy;
+        removeBtn.disabled = busy;
+        closeBtn.disabled = busy;
+        spinner.hidden = !busy;
+        if (busy) {
+          statusEl.className = 'status-msg';
+          statusText.textContent = message || 'Aplicando cambios...';
+        }
+      }
+
+      function applyStatus(status, message) {
+        const badge = document.getElementById('stateBadge');
+        const countText = document.getElementById('countText');
+        const installBtn = document.getElementById('installBtn');
+        const removeBtn = document.getElementById('removeBtn');
+        const statusEl = document.getElementById('statusMsg');
+        const statusText = document.getElementById('statusText');
+
+        const active = Boolean(status && status.installed);
+        const count = (status && status.count) || 0;
+        badge.className = 'status-badge ' + (active ? 'badge-ok' : 'badge-muted');
+        badge.textContent = active ? 'Activo' : 'Inactivo';
+        countText.textContent = active
+          ? (count + ' trigger' + (count === 1 ? '' : 's') + ' activo' + (count === 1 ? '' : 's') + ' configurado' + (count === 1 ? '' : 's'))
+          : 'No hay ningún trigger diario instalado actualmente';
+        installBtn.textContent = active ? 'Reinstalar (03:00)' : 'Activar trigger diario';
+        removeBtn.hidden = !active;
+        statusEl.className = 'status-msg status-ok';
+        statusText.textContent = message || '';
+      }
+
+      function showError(msg) {
+        const statusEl = document.getElementById('statusMsg');
+        const statusText = document.getElementById('statusText');
+        statusEl.className = 'status-msg status-err';
+        statusText.textContent = msg || 'Error al operar sobre el trigger diario.';
+      }
+
+      function installTrigger() {
+        setBusy(true, 'Programando trigger diario (03:00)...');
+        google.script.run
+          .withSuccessHandler(function (res) {
+            setBusy(false);
+            if (res && res.success) {
+              applyStatus(res.status, 'Trigger diario activado correctamente (03:00–04:00).');
+            } else {
+              showError(res && res.error);
+            }
+          })
+          .withFailureHandler(function (err) {
+            setBusy(false);
+            showError(err && err.message);
+          })
+          .apiInstallTriggerFromDialog(DIALOG_TOKEN);
+      }
+
+      function removeTrigger() {
+        setBusy(true, 'Desactivando trigger diario...');
+        google.script.run
+          .withSuccessHandler(function (res) {
+            setBusy(false);
+            if (res && res.success) {
+              applyStatus(res.status, 'Trigger diario desactivado correctamente.');
+            } else {
+              showError(res && res.error);
+            }
+          })
+          .withFailureHandler(function (err) {
+            setBusy(false);
+            showError(err && err.message);
+          })
+          .apiRemoveTriggerFromDialog(DIALOG_TOKEN);
+      }
+    </script>
+  </body>
+</html>
