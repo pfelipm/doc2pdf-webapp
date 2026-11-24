@@ -279,41 +279,42 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
-    min-block-size: 38px;
+    min-block-size: 36px;
     padding: 8px 16px;
-    border: 0;
+    border: 1px solid transparent;
     border-radius: 8px;
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
     text-decoration: none;
   }
-  .btn-close {
-    padding: 8px 22px;
-    border-radius: 999px;
-    background: var(--accent);
-    color: #ffffff;
-  }
   .btn-primary {
     background: var(--accent);
+    border-color: var(--accent);
     color: #ffffff;
   }
-  .btn-outline {
+  .btn-close, .btn-outline {
     background: #ffffff;
     color: #334155;
-    border: 1px solid #cbd5e1;
+    border-color: #cbd5e1;
   }
   .btn-danger {
     background: #dc2626;
+    border-color: #dc2626;
     color: #ffffff;
   }
   .btn-danger-outline {
     background: #ffffff;
     color: #b91c1c;
-    border: 1px solid #fca5a5;
+    border-color: #fca5a5;
   }
-  .btn:hover:not(:disabled), .btn-close:hover:not(:disabled) { filter: brightness(0.97); }
-  .btn-primary:hover:not(:disabled), .btn-close:hover:not(:disabled) { filter: brightness(1.06); }
+  .btn:hover:not(:disabled) { filter: brightness(0.97); }
+  .btn-primary:hover:not(:disabled) { filter: brightness(1.06); }
+  .btn-close:hover:not(:disabled), .btn-outline:hover:not(:disabled) {
+    filter: none;
+    background: #f8fafc;
+    border-color: #94a3b8;
+  }
   .btn:disabled, .btn-close:disabled { opacity: 0.6; cursor: not-allowed; }
   .btn[hidden], .btn-close[hidden] { display: none; }
   .btn:focus-visible, .btn-close:focus-visible, .radio-opt input:focus-visible {

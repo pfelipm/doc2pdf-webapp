@@ -266,13 +266,16 @@ function openWebAppDialog() {
         <meta charset="utf-8">
         <style>
           * { box-sizing: border-box; }
+          html, body { height: 100%; margin: 0; }
           body {
-            margin: 0;
+            display: flex;
+            flex-direction: column;
             font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
             background: #f8fafc;
             color: #0f172a;
           }
           .hdr {
+            flex-shrink: 0;
             background: linear-gradient(135deg, ${safeAccent} 0%, #0f2b5b 100%);
             color: #fff;
             padding: 14px 20px;
@@ -283,11 +286,13 @@ function openWebAppDialog() {
             font-size: 16px;
           }
           .body {
-            padding: 18px 20px;
+            flex: 1 1 auto;
+            overflow-y: auto;
+            padding: 16px 20px;
             text-align: center;
           }
           .msg {
-            margin: 0 0 16px 0;
+            margin: 0 0 14px 0;
             font-size: 13.5px;
             color: #334155;
             line-height: 1.45;
@@ -300,33 +305,50 @@ function openWebAppDialog() {
           .btn {
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 6px;
-            border: 0;
+            min-block-size: 36px;
+            border: 1px solid transparent;
             border-radius: 8px;
-            padding: 9px 16px;
-            font-size: 13.5px;
+            padding: 8px 16px;
+            font-size: 13px;
             font-weight: 600;
             cursor: pointer;
             text-decoration: none;
           }
-          .btn-primary { background: ${safeAccent}; color: #fff; }
-          .btn-secondary { background: #e2e8f0; color: #1e293b; }
-          .tip { margin-top: 12px; font-size: 12px; color: #64748b; }
+          .btn-primary { background: ${safeAccent}; border-color: ${safeAccent}; color: #fff; }
+          .btn-secondary { background: #e2e8f0; border-color: #e2e8f0; color: #1e293b; }
+          .btn-close { background: #ffffff; color: #334155; border-color: #cbd5e1; }
+          .btn-close:hover { background: #f8fafc; border-color: #94a3b8; }
+          .btn:focus-visible { outline: 3px solid #0f172a; outline-offset: 2px; }
+          .tip { margin-top: 10px; font-size: 12px; color: #64748b; }
+          .footer-bar {
+            flex-shrink: 0;
+            background: #ffffff;
+            border-top: 1px solid #e2e8f0;
+            padding: 10px 18px;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+          }
         </style>
       </head>
       <body>
-        <div class="hdr">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        <header class="hdr">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
           <span>Abrir ${safeAppName}</span>
-        </div>
-        <div class="body">
+        </header>
+        <main class="body">
           <p class="msg">Si tu navegador bloqueó la ventana emergente automática, utiliza los botones siguientes:</p>
           <div class="actions">
             <a class="btn btn-primary" href="${safeUrl}" target="_blank" rel="noopener" onclick="setTimeout(function(){ google.script.host.close(); }, 250)">Abrir WebApp</a>
             <button type="button" class="btn btn-secondary" onclick="copyLink(this)">Copiar enlace</button>
           </div>
           <div id="tip" class="tip">Permite ventanas emergentes para abrir la app directamente la próxima vez.</div>
-        </div>
+        </main>
+        <footer class="footer-bar">
+          <button type="button" class="btn btn-close" onclick="google.script.host.close()">Cerrar</button>
+        </footer>
         <script>
           var TARGET_URL = ${safeJsUrl};
           function copyLink(btn) {
@@ -343,7 +365,7 @@ function openWebAppDialog() {
         </script>
       </body>
     </html>
-  `).setWidth(460).setHeight(225);
+  `).setWidth(460).setHeight(255);
 
   SpreadsheetApp.getUi().showModalDialog(html, ' ');
 }

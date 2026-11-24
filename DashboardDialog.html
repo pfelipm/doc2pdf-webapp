@@ -107,6 +107,10 @@
         cursor: pointer;
       }
       .icon-btn:hover { background: rgba(255, 255, 255, 0.24); }
+      .icon-btn:focus-visible, .seg-btn:focus-visible {
+        outline: 2px solid #ffffff;
+        outline-offset: 2px;
+      }
 
       .main {
         padding: 16px 20px 22px;
@@ -521,10 +525,16 @@
           <button type="button" class="seg-btn" data-days="0" onclick="changePeriod(0)">Todo</button>
         </div>
         <button type="button" class="icon-btn" onclick="loadAnalytics()" title="Actualizar datos">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
           </svg>
           Actualizar
+        </button>
+        <button type="button" class="icon-btn" onclick="google.script.host.close()" title="Cerrar panel">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+          Cerrar
         </button>
       </div>
     </header>
