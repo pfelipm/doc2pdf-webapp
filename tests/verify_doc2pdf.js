@@ -1154,6 +1154,9 @@ assert(stylesHtmlSrc.includes('.btn-sm[aria-pressed="true"]:not(:disabled)'), 'S
 assert(stylesHtmlSrc.includes('scrollbar-gutter: stable;'), 'Styles.html debe reservar scrollbar-gutter: stable en .preview-stage');
 assert(stylesHtmlSrc.includes('@media (hover: hover)') && stylesHtmlSrc.includes(':not(:disabled)'), 'Styles.html debe restringir hover a dispositivos hover y botones activos');
 assert(stylesHtmlSrc.includes('@media (forced-colors: active)'), 'Styles.html debe contemplar modo forced-colors para botones desactivados');
+assert(stylesHtmlSrc.includes('--accent-hover: color-mix(in oklab, var(--accent)'), 'Styles.html debe definir --accent-hover en oklab para mantener contraste en hover');
+assert(stylesHtmlSrc.includes('.btn-sm:where(:not(.primary)'), 'Styles.html debe excluir .primary del hover neutro de .btn-sm');
+assert(stylesHtmlSrc.includes('.btn-sm.primary:where(:not(:disabled):not([aria-disabled="true"])):hover'), 'Styles.html debe definir hover específico para .btn-sm.primary con fondo de acento');
 
 const previewCtrlStart = clientHtml.indexOf('function updatePreviewControls()');
 const previewCtrlEnd = clientHtml.indexOf('function destroyPreviewState()', previewCtrlStart);

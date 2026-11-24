@@ -1,6 +1,7 @@
 <style>
   :root {
     --accent: #1a73e8;
+    --accent-hover: color-mix(in oklab, var(--accent) 86%, #000000);
     --accent-contrast: #ffffff;
 
     --bg-light: #f1f5f9;
@@ -598,11 +599,27 @@
     font-size: 13.5px;
     font-weight: 700;
     cursor: pointer;
-    transition: filter 0.15s ease, transform 0.1s ease;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
   }
-  .btn-primary:hover { filter: brightness(1.07); }
-  .btn-primary:active { transform: translateY(1px); }
-  .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+  @media (hover: hover) {
+    .btn-primary:where(:not(:disabled):not([aria-disabled="true"])):hover {
+      background: var(--accent-hover);
+      color: var(--accent-contrast);
+      box-shadow: 0 2px 8px color-mix(in oklab, var(--accent) 32%, transparent);
+    }
+  }
+  .btn-primary:where(:not(:disabled):not([aria-disabled="true"])):active {
+    transform: translateY(1px);
+  }
+  .btn-primary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .btn-primary:disabled,
+  .btn-primary[aria-disabled="true"] {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
 
   .btn-sm {
     display: inline-flex;
@@ -617,9 +634,10 @@
     font-weight: 600;
     cursor: pointer;
     text-decoration: none;
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
   }
   @media (hover: hover) {
-    .btn-sm:not(:disabled):not([aria-disabled="true"]):hover {
+    .btn-sm:where(:not(.primary):not([aria-pressed="true"]):not(:disabled):not([aria-disabled="true"])):hover {
       background: var(--surface-alt);
       border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
     }
@@ -642,6 +660,30 @@
     border-color: var(--accent);
     box-shadow: inset 0 0 0 1px var(--accent);
   }
+  .btn-sm.primary {
+    background: var(--accent);
+    color: var(--accent-contrast);
+    border-color: transparent;
+  }
+  @media (hover: hover) {
+    .btn-sm.primary:where(:not(:disabled):not([aria-disabled="true"])):hover {
+      background: var(--accent-hover);
+      color: var(--accent-contrast);
+      border-color: transparent;
+      box-shadow: 0 2px 8px color-mix(in oklab, var(--accent) 32%, transparent);
+    }
+  }
+  .btn-sm.primary:where(:not(:disabled):not([aria-disabled="true"])):active {
+    transform: translateY(1px);
+  }
+  .btn-sm.primary:disabled,
+  .btn-sm.primary[aria-disabled="true"] {
+    opacity: 0.6;
+    background: var(--accent);
+    color: var(--accent-contrast);
+    border-color: transparent;
+    cursor: not-allowed;
+  }
   @media (forced-colors: active) {
     .btn-sm[aria-pressed="true"]:not(:disabled) {
       forced-color-adjust: none;
@@ -649,17 +691,16 @@
       color: HighlightText;
       border-color: Highlight;
     }
+    .btn-primary:disabled,
+    .btn-primary[aria-disabled="true"],
     .btn-sm:disabled,
-    .btn-sm[aria-disabled="true"] {
+    .btn-sm[aria-disabled="true"],
+    .btn-sm.primary:disabled,
+    .btn-sm.primary[aria-disabled="true"] {
       opacity: 1;
       color: GrayText;
       border-color: GrayText;
     }
-  }
-  .btn-sm.primary {
-    background: var(--accent);
-    color: var(--accent-contrast);
-    border-color: transparent;
   }
 
   /* Cola de trabajos */
