@@ -4,6 +4,15 @@
 
 # Doc2PDF WebApp
 
+![Versión v1.0](https://img.shields.io/badge/Versi%C3%B3n-v1.0-1a73e8)
+[![Licencia GNU GPL v3.0](https://img.shields.io/github/license/pfelipm/doc2pdf-webapp?label=Licencia&color=2563eb)](LICENSE)
+[![Último commit](https://img.shields.io/github/last-commit/pfelipm/doc2pdf-webapp?label=%C3%9Altimo%20commit&color=475569)](https://github.com/pfelipm/doc2pdf-webapp/commits/main)
+![Google Apps Script V8](https://img.shields.io/badge/Google%20Apps%20Script-V8-4285F4?logo=googleappsscript&logoColor=white)
+![Drive API v3](https://img.shields.io/badge/Drive%20API-v3-34A853?logo=googledrive&logoColor=white)
+![Formatos soportados: 21 extensiones y Google Workspace](https://img.shields.io/badge/Formatos-21%20extensiones%20%2B%20Workspace-0f766e)
+![Dependencias externas: 0](https://img.shields.io/badge/Dependencias-0%20externas-15803d)
+![Control de acceso: Google Groups y Fail-Closed](https://img.shields.io/badge/Acceso-Google%20Groups%20%C2%B7%20Fail--Closed-0f2b5b)
+
 Microservicio web ligero e interno para **Google Workspace** desarrollado íntegramente en **Google Apps Script** (sin bibliotecas ni servidores externos). Está diseñado para que **un administrador (o cuenta funcional) despliegue una única instancia de la WebApp y ofrezca conversión centralizada de documentos a PDF a todos los usuarios de su dominio**, evitando que el personal o el alumnado tenga que instalar software adicional, mantener infraestructura propia o subir archivos institucionales a conversores online de terceros, mientras mantiene las políticas de acceso, cuotas y auditoría gobernadas desde una Google Sheet privada.
 
 ---
