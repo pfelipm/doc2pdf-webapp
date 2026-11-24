@@ -44,6 +44,40 @@ Microservicio web ligero e interno para **Google Workspace** desarrollado ínteg
 
 ---
 
+## Capturas de pantalla
+
+### Hojas de control y panel de analítica en Google Sheets
+
+| Pestaña `Ajustes` (21 parámetros con validaciones) | Pestaña `Auditoría` (registro y filtros activos) |
+| :---: | :---: |
+| ![Pestaña Ajustes en Google Sheets con validaciones, casillas y desplegable](assets/hdc-ajustes.png) | ![Pestaña Auditoría en Google Sheets con filtros activos y registros de conversiones](assets/hdc-auditoria.png) |
+
+<p align="center">
+  <img src="assets/dialogo-analitica.png" alt="Dashboard modal Resumen y analítica con KPIs, gráfico SVG diario, distribución por familias y explorador completo de Auditoría" width="90%" /><br/>
+  <sub><strong>Resumen y analítica:</strong> KPIs configurables por periodo, serie diaria SVG, donut por familias, orígenes/extensiones, usuarios clicables y explorador filtrable de toda la hoja.</sub>
+</p>
+
+### Gestión, mantenimiento y despliegue
+
+| Gestor y diagnóstico en vivo de listas y grupos | Verificación de formatos soportados (Drive API v3) |
+| :---: | :---: |
+| ![Modal Listas de acceso y Google Groups con edición en línea, alternancia g: y leyenda Fail-Closed](assets/dialogo-usuarios-grupos.png) | ![Modal Formatos soportados con recuento de 21 extensiones y acordeón desplegable por familias](assets/dialogo-formatos.png) |
+
+| Trigger diario de mantenimiento | Asistente de despliegue de WebApp (`/exec`) |
+| :---: | :---: |
+| ![Modal Trigger diario de mantenimiento mostrando estado activo, horario y botones de reinstalar o desactivar](assets/dialogo-trigger.png) | ![Modal Asistente de despliegue con guía de publicación y registro de URL /exec](assets/dialogo-asistente-despliegue.png) |
+
+| Confirmación de reinicialización de hoja | Acerca de Doc2PDF |
+| :---: | :---: |
+| ![Modal Reinicializar Doc2PDF con aviso de restablecimiento de Ajustes y conservación de Auditoría](assets/dialogo-inicializar.png) | ![Modal Acerca de Doc2PDF con banner superior, insignias técnicas, autoría y licencia GNU GPL v3.0](assets/dialogo-acercade.png) |
+
+<p align="center">
+  <img src="assets/dialogo-abrir-webapp.png" alt="Modal Abrir Doc2PDF con acceso directo, copia de enlace y cierre" width="482" /><br/>
+  <sub><strong>Acceso rápido (`Abrir WebApp`):</strong> respaldo interactivo cuando el navegador bloquea ventanas emergentes.</sub>
+</p>
+
+---
+
 ## Arquitectura de seguridad y defensa en profundidad
 
 Siguiendo un diseño *Zero Trust* respecto al navegador y mínimo privilegio en Apps Script:
@@ -69,7 +103,8 @@ La raíz del repositorio coincide con el directorio raíz de `clasp` (`rootDir: 
 │   │   ├── drive-api.svg        # Badge Drive API v3
 │   │   ├── license.svg          # Badge GNU GPL v3.0
 │   │   └── version.svg          # Badge versión del proyecto
-│   └── banner.jpg               # Banner del repositorio (1376×688, proporción 2:1)
+│   ├── banner.jpg               # Banner del repositorio (1376×688, proporción 2:1)
+│   └── *.png                    # 10 capturas de pantalla enlazadas desde README.md (`hdc-*.png`, `dialogo-*.png`)
 ├── .clasp.json.example          # Plantilla de configuración para clasp (rootDir: ".")
 ├── .claspignore                 # Excluye documentación, assets y metadatos al hacer clasp push
 ├── .gitignore
