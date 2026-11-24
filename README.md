@@ -8,9 +8,6 @@
 [![Licencia GNU GPL v3.0](assets/badges/license.svg)](LICENSE)
 ![Google Apps Script V8](assets/badges/apps-script.svg)
 ![Drive API v3](assets/badges/drive-api.svg)
-![Formatos soportados: 21 extensiones y Google Workspace](assets/badges/formats.svg)
-![Dependencias externas: 0](assets/badges/zero-deps.svg)
-![Control de acceso: Google Groups y Fail-Closed](assets/badges/access.svg)
 
 Microservicio web ligero e interno para **Google Workspace** desarrollado íntegramente en **Google Apps Script** (sin bibliotecas ni servidores externos). Está diseñado para que **un administrador (o cuenta funcional) despliegue una única instancia de la WebApp y ofrezca conversión centralizada de documentos a PDF a todos los usuarios de su dominio**, evitando que el personal o el alumnado tenga que instalar software adicional, mantener infraestructura propia o subir archivos institucionales a conversores online de terceros, mientras mantiene las políticas de acceso, cuotas y auditoría gobernadas desde una Google Sheet privada.
 
