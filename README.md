@@ -367,7 +367,7 @@ Doc2PDF prioriza un despliegue simple, sin servidores intermedios ni mantenimien
 
 ## Buenas prácticas de desarrollo, verificación y CI/CD
 
-Este proyecto está documentado con vocación abierta para facilitar que docentes, coordinadores TIC y desarrolladores en Google Apps Script puedan **aprender y reutilizar patrones seguros de ingeniería** sin infraestructura compleja:
+Este proyecto está documentado con vocación abierta para facilitar que docentes, coordinadores TIC y desarrolladores en Google Apps Script (y sus agentes de IA...) puedan **aprender y reutilizar patrones seguros de ingeniería** sin infraestructura compleja:
 
 1. **Suite local en Node.js sin dependencias ([verify_doc2pdf.js](tests/verify_doc2pdf.js))**
    - Simula los servicios de Google Apps Script en memoria mediante `vm.createContext` y *mocks* ligeros, sin instalar `node_modules` ni depender de cuota de ejecución en la nube.
